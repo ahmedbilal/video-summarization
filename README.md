@@ -1,7 +1,46 @@
 # Video Summarization
-As video content is growing rapidly where video summarization helps us to focus on automatically selecting informative parts from video, is becoming critical. In our project we are going to develop a dynamic video synopsis(simultaneous presentation of events that enables the review of hours of video footage in just minutes).We can do that by shifting events from their original time interval to another time interval when no other activity takes place at that spatial location. There are two approaches that were commonly used for video synopsis, first one is to select a set of key frames from the original video sequence and second is a collection of short video sequences. Dynamic video synopsis has lot of applications in real life.
+Video summarization is used to create a summarized video with user specified features from the original video. In this project, we will develop a dynamic video summarization (simultaneous presentation of events that will enable the review of hours of video footage in just minutes). The main goal of this project is to save time when extracting information from long videos. We are doing this by shifting events from their original time interval to another time interval when no other activity is happening at that spatial location. We are selecting some long videos and also obtaining some CCTV camera footages from live CCTV streamed from YouTube. The output of our program would be a summarized video created from a lengthy original video with user specified features. 
 
+## Software
+1. VLC
 
+## Dependencies
+1. NumPy
+2. OpenCV
+
+## Installation
+### Manjaro Linux
+
+Run this command to update your system
+```bash
+sudo pacman -Syu
+```
+Run the following command to install tk (used for idle),jupyter
+```bash
+sudo pacman -S tk jupyter
+```
+
+Run the following command to install numpy and opencv, matplotlib
+```bash
+sudo pip install opencv-python numpy matplotlib
+```
+
+## Usage
+### Jupyter Notebook
+To run the jupyter notebooks (files with .ipynb extension) run the following command.
+
+```bash
+jupyter notebook
+```
+
+1. Now, browse and open your .ipynb file.
+2. It is opened but not trusted to run on your computer.
+3. To trust click on **Not Trusted** button on the top right corner of your screen.
+4. A dialog will appear now click the red **Trust** button.
+5. You have successfully trusted the notebook.
+6. To run it click on **Kernel->Restart and Run all->Restart and Run all Cell** from top menu.
+
+**Note** Notebooks are often outdated. They are just used to develop initial working program. For latest and greatest implementation refer to python files (with .py extension)
 ## References
 1. https://en.wikipedia.org/wiki/Video_synopsis
 2. http://www.vision.huji.ac.il/video-synopsis/iccv07-webcam.pdf
