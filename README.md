@@ -9,15 +9,11 @@ Video summarization is used to create a summarized video with user specified fea
 2. OpenCV
 
 ## Installation
-### Manjaro Linux
+### Ubuntu
 
-Run this command to update your system
-```bash
-sudo pacman -Syu
-```
 Run the following command to install tk (used for idle),jupyter
 ```bash
-sudo pacman -S tk jupyter
+sudo apt install jupyter
 ```
 
 Run the following command to install numpy and opencv, matplotlib
