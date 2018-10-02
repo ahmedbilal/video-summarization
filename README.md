@@ -9,20 +9,23 @@ Video summarization is used to create a summarized video with user specified fea
 2. OpenCV
 
 ## Installation
-### Ubuntu
+### Ubuntu 18.04
 
-Run the following command to install tk (used for idle),jupyter
+Run the following command to install jupyter
 ```bash
 sudo apt install jupyter
 ```
 
 Run the following command to install numpy and opencv, matplotlib
 ```bash
-sudo pip install opencv-python numpy matplotlib
+sudo pip3 install opencv-python numpy matplotlib
 ```
 
 ## Usage
 ### Jupyter Notebook
+**Note** Notebooks are often outdated. They are just used to develop initial working program. For latest and greatest implementation refer to python files (with .py extension)
+
+
 To run the jupyter notebooks (files with .ipynb extension) run the following command.
 
 ```bash
@@ -36,7 +39,6 @@ jupyter notebook
 5. You have successfully trusted the notebook.
 6. To run it click on **Kernel->Restart and Run all->Restart and Run all Cell** from top menu.
 
-**Note** Notebooks are often outdated. They are just used to develop initial working program. For latest and greatest implementation refer to python files (with .py extension)
 ## References
 1. https://en.wikipedia.org/wiki/Video_synopsis
 2. http://www.vision.huji.ac.il/video-synopsis/iccv07-webcam.pdf

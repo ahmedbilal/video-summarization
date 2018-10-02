@@ -29,7 +29,8 @@ def substantial_motion_video(filename, out_filename):
         diff = diff_perc(frame, substantially_diff_frames[-1])
         if diff > THRESHOLD:
             substantially_diff_frames.append(frame)
-    video = cv2.VideoWriter(out_filename, cv2.VideoWriter_fourcc(*'H264'),
+    fourcc = cv2.VideoWriter_fourcc(*'avc1')
+    video = cv2.VideoWriter(out_filename, fourcc,
                             frames_per_sec_in_org_video * ADJUSTMENT, tuple(reversed(substantially_diff_frames[0].shape[:2])))
 
     for frame in substantially_diff_frames:
@@ -39,5 +40,5 @@ def substantial_motion_video(filename, out_filename):
     del frames
     del substantially_diff_frames
 
-# substantial_motion_video(input_filename, output_filename)
+substantial_motion_video("Normal_Videos319_x264.mp4", "short.mp4")
 
