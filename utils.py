@@ -78,3 +78,12 @@ class ABKVideoCapture(object):
                 output_video.write(frame)
 
         output_video.release()
+
+    def get_background(self):
+        background = np.float32(cv2.cvtColor(self.next_frame(), cv2.COLOR_BGR2RGB))
+
+        for frame in self.frames:
+            background = np.add(background, cv2.cvtColor(np.float32(frame), cv2.COLOR_BGR2RGB))
+        background = background / self.total_frames
+
+        return background.astype(np.uint8)

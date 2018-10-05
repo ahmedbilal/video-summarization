@@ -7,6 +7,7 @@ Video summarization is used to create a summarized video with user specified fea
 ## Dependencies
 1. NumPy
 2. OpenCV
+3. Matplotlib
 
 ## Installation
 ### Ubuntu 18.04
