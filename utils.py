@@ -54,7 +54,7 @@ class ABKVideoCapture(object):
 
         return next(self.frames)
 
-    def create_substantial_motion_video(self, out_filename):
+    def create_substantial_motion_video(self, out_filename, fourcc_str="avc1"):
         """
         Author: Ahmed Bilal Khalid
 
@@ -64,7 +64,7 @@ class ABKVideoCapture(object):
 
         THRESHOLD = 0.5
 
-        fourcc = cv2.VideoWriter_fourcc('a', 'v', 'c', '1')
+        fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
         output_video = cv2.VideoWriter(out_filename, fourcc,
                                        self.frames_per_second,
                                        self.dimensions)
