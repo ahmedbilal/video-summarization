@@ -27,9 +27,8 @@ class ABKVideoCapture(object):
             self.frames = self.frames_generator()
             self.frames_per_second = self.video.get(cv2.CAP_PROP_FPS)
             self.total_frames = self.video.get(cv2.CAP_PROP_FRAME_COUNT)
-            width = int(self.video.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(self.video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            self.dimensions = width, height
+            self.dimensions = int(self.video.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                              int(self.video.get(cv2.CAP_PROP_FRAME_HEIGHT))
         else:
             raise FileNotFoundError()
 
