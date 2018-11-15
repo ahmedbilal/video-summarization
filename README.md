@@ -4,25 +4,32 @@
 
 Video summarization is used to create a summarized video with user specified features from the original video. In this project, we will develop a dynamic video summarization (simultaneous presentation of events that will enable the review of hours of video footage in just minutes). The main goal of this project is to save time when extracting information from long videos. We are doing this by shifting events from their original time interval to another time interval when no other activity is happening at that spatial location. We are selecting some long videos and also obtaining some CCTV camera footages from live CCTV streamed from YouTube. The output of our program would be a summarized video created from a lengthy original video with user specified features. 
 
-## Software
-1. VLC
 
-## Dependencies
-1. NumPy
-2. OpenCV
-3. Matplotlib
-
-## Installation
+## Development Environment Setup
+Run the following command to make your development environment identical to that of Ahmad Bilal Khalid (ABK).
 ### Ubuntu 18.04
 
-Run the following command to install jupyter
+Run the following commands one by one.
 ```bash
-sudo apt install jupyter
-```
+sudo apt install python3-pip
 
-Run the following command to install numpy and opencv, matplotlib
+sudo apt install jupyter
+
+sudo pip3 install opencv-python numpy matplotlib Cython imgaug 'setuptools<=39.1.0' wheel
+
+cd ~/Desktop
+
+git clone https://github.com/waleedka/coco
+
+nano coco/PythonAPI/Makefile
+```
+Replace, **python** with **python3** and Press **Ctrl + x** and then **y** to save file
 ```bash
-sudo pip3 install opencv-python numpy matplotlib
+sudo make install -C coco/PythonAPI
+
+git clone https://github.com/ahmedbilal/Video-Summarization.git
+
+git clone https://github.com/matterport/Mask_RCNN.git
 ```
 
 ## Usage

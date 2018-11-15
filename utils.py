@@ -145,13 +145,11 @@ class BATRPickle(object):
         Return an iterator to uncompressed and unpickled file member of self.input_file
         """
 
-        member = self.input_file.next()
-
-        while member:
+        members = self.input_file.getmembers()
+        for member in members:
             f = self.input_file.extractfile(member)
             content = f.read()
             uncompressed = zlib.decompress(content)
-            member = self.input_file.next()
             yield pickle.loads(uncompressed)
 
 
