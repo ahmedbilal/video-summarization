@@ -25,6 +25,8 @@ nano coco/PythonAPI/Makefile
 ```
 Replace, **python** with **python3** and Press **Ctrl + x** and then **y** to save file
 ```bash
+sudo apt install gcc
+
 sudo make install -C coco/PythonAPI
 
 git clone https://github.com/ahmedbilal/Video-Summarization.git

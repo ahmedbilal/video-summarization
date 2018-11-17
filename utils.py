@@ -19,6 +19,7 @@ def diff_perc(image1, image2):
     diff = cv2.absdiff(gray_image1, gray_image2)
     return np.sum(diff)/np.prod(diff.shape)
 
+
 class BATRVideoCapture(object):
     """
         Author: Ahmed Bilal Khalid
@@ -31,7 +32,8 @@ class BATRVideoCapture(object):
             self.frames = self.frames_generator()
             self.frames_per_second = self.video.get(cv2.CAP_PROP_FPS)
             self.total_frames = self.video.get(cv2.CAP_PROP_FRAME_COUNT)
-            self.dimensions = int(self.video.get(cv2.CAP_PROP_FRAME_WIDTH)),int(self.video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.dimensions = int(self.video.get(cv2.CAP_PROP_FRAME_WIDTH)), \
+                int(self.video.get(cv2.CAP_PROP_FRAME_HEIGHT))
             self.video.set(cv2.CAP_PROP_POS_FRAMES, offset-1)
         else:
             raise FileNotFoundError()
@@ -83,7 +85,7 @@ class BATRVideoCapture(object):
         frame.
         """
 
-        THRESHOLD = 0.5
+        _threshold = 0.5
 
         fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
         output_video = cv2.VideoWriter(out_filename, fourcc,
@@ -94,7 +96,7 @@ class BATRVideoCapture(object):
 
         for frame in self.frames:
             diff = diff_perc(last_frame, frame)
-            if diff > THRESHOLD:
+            if diff > _threshold:
                 last_frame = frame
                 output_video.write(frame)
 
@@ -111,7 +113,7 @@ class BATRVideoCapture(object):
 
 
 class BATRPickle(object):
-    def __init__(self, in_file = None, out_file = None):
+    def __init__(self, in_file=None, out_file=None):
         self.input_file = None
         self.output_file = None
 
@@ -136,13 +138,12 @@ class BATRPickle(object):
         self.output_file.add(filename)
         os.remove(filename)
 
-    
     def unpickle(self):
         """
         Author: Ahmed Bilal Khalid
         Contributor: None
 
-        Return an iterator to uncompressed and unpickled file member of self.input_file
+        Return an iterator to name of uncompressed and unpickled file member of self.input_file and its content
         """
 
         members = self.input_file.getmembers()
@@ -150,8 +151,7 @@ class BATRPickle(object):
             f = self.input_file.extractfile(member)
             content = f.read()
             uncompressed = zlib.decompress(content)
-            yield pickle.loads(uncompressed)
-
+            yield member.name, pickle.loads(uncompressed)
 
     def __del__(self):
         """
