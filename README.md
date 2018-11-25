@@ -15,7 +15,7 @@ sudo apt install python3-pip
 
 sudo apt install jupyter
 
-sudo pip3 install opencv-python numpy matplotlib Cython imgaug 'setuptools<=39.1.0' wheel
+sudo pip3 install opencv-python numpy matplotlib Cython imgaug 'setuptools<=39.1.0' wheel tensorflow
 
 cd ~/Desktop
 
