@@ -118,10 +118,14 @@ class BATRPickle(object):
         self.output_file = None
 
         if in_file:
-            self.input_file = tarfile.open(in_file, "r:bz2")
+            filename, file_extension = os.path.splitext(in_file)
+            self.input_file = tarfile.open(in_file,
+                                           "r:{}".format(file_extension[1:]))  # ignoring the dot in extension
         
         if out_file:
-            self.output_file = tarfile.open(out_file, "w:bz2")
+            filename, file_extension = os.path.splitext(out_file)
+            self.output_file = tarfile.open(out_file,
+                                            "w:{}".format(file_extension[1:]))  # ignoring the dot in extension
 
     def pickle(self, obj, filename):
         """
@@ -153,6 +157,13 @@ class BATRPickle(object):
             uncompressed = zlib.decompress(content)
             yield member.name, pickle.loads(uncompressed)
 
+    def unpickle_file(self, filename):
+        member = self.input_file.getmember("{}.pickled.zlibed".format(filename))
+        f = self.input_file.extractfile(member)
+        content = f.read()
+        uncompressed = zlib.decompress(content)
+        return pickle.loads(uncompressed)
+
     def __del__(self):
         """
         Author: Ahmed Bilal Khalid
@@ -166,6 +177,13 @@ class BATRPickle(object):
         
         if self.output_file:
             self.output_file.close()
+
+
+class BATRTar(tarfile.TarFile):
+    def allextractedfiles(self):
+        for member in self.getmembers():
+            f = self.extractfile(member)
+            yield f
 
 
 # For API Compatibility
