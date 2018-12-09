@@ -4,33 +4,13 @@ Video summarization is used to create a summarized video with user specified fea
 
 ## Development Environment Setup
 Run the following command to make your development environment identical to that of Ahmad Bilal Khalid (ABK).
-### Ubuntu 18.04 or 18.10
+### Ubuntu
 
 Run the following commands one by one with patience as they can take
 some time.
+
 ```bash
-sudo apt install python3-pip jupyter gcc \
-    libjpeg62-dev libavcodec-dev libswscale-dev \
-    libffi-dev gstreamer1.0-opencv
-
-sudo pip3 install opencv-python numpy matplotlib \
-Cython imgaug 'setuptools<=39.1.0' wheel tensorflow vi3o
-
-cd ~/Desktop
-
-git clone --depth=1 https://github.com/waleedka/coco
-
-nano coco/PythonAPI/Makefile
-```
-Replace, **python** with **python3** and Press **Ctrl + x** and then **y** to save file
-```bash
-sudo apt install 
-
-sudo make install -C coco/PythonAPI
-
-git clone --depth=1 https://github.com/ahmedbilal/Video-Summarization.git
-
-git clone --depth=1 https://github.com/matterport/Mask_RCNN.git
+chmod +x ./setup.sh && export PYTHON=python3 && ./setup.sh
 ```
 
 

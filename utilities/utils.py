@@ -40,17 +40,6 @@ class BATRVideoCapture(object):
 
     def set_offset(self, offset):
         self.video.set(cv2.CAP_PROP_POS_FRAMES, offset-1)
-
-    def set_offset_in_second(self, second):
-        """
-        Author: Ahmed Bilal Khalid
-        Acknowledgement: https://stackoverflow.com/a/47867180
-
-        Offset VideoCapture object by argument (second)
-        Note: It uses some non-documented stuff. So, use it on your own risk
-        """
-
-        self.video.set(cv2.CAP_PROP_POS_FRAMES, second * self.frames_per_second - 1)
     
     def frames_generator(self):
         """

@@ -1,6 +1,10 @@
 __pycache__
 .vscode/
 .vscode
+Mask_RCNN/
+input/
+output/
+pyflow/
 
 # Jupyter Notebook
 .ipynb_checkpoints
