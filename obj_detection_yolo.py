@@ -14,7 +14,7 @@ for frame_n, frame_filename in enumerate(sorted(os.listdir(Config.frames_dir)), 
                                   "input", "videos", "frames", frame_filename)
     print(frame_filename)
     detected_objects = obj_detector.detect_image(frame_filename)
-    pickler.pickle(detected_objects, f"frame{frame_n:06d}_yolo")
+    pickler.pickle(detected_objects, f"frame{frame_n:06d}")
     if frame_n == 10:
         break
 pickler.close()
