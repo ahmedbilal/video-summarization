@@ -126,7 +126,7 @@ class BATRPickle(object):
         compressed = zlib.compress(serialized_obj, 9)
         with open(f"{filename}.pickled.zlibed", "wb") as f:
             f.write(compressed)        
-        self.output_file.add(filename)
+        self.output_file.add(f"{filename}.pickled.zlibed")
         os.remove(filename)
 
     # def unpickle(self):
