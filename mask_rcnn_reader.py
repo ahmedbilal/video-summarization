@@ -5,7 +5,7 @@ import sys
 from vi3o import Video
 
 from math import sqrt
-from video_summarization.utilities.utils import BATRPickle
+from utilities.utils import BATRPickle
 
 sys.path.append("Mask_RCNN")
 from mrcnn import visualize
@@ -77,15 +77,15 @@ CONFIG["end"] = 5500
 CONFIG["input_video_file"] = "input/videos/wales_shortened.mp4"
 CONFIG["input_mask_file"] = "input/maskrcnn0-5000.tar.gz"
 
-CONFIG["display_video"] = True
-CONFIG["display_image"] = False
+CONFIG["display_video"] = False
+CONFIG["display_image"] = True
 
 CONFIG["subtract_background"] = False
 CONFIG["background_file"] = "input/wales_background.jpg"
 
 CONFIG["create_masked_video"] = False
 CONFIG["output_video_file"] = "output/wales_shortened_maskrcnn0-5000.mp4"
-CONFIG["display_object_info"] = True
+CONFIG["display_object_info"] = False
 
 
 # Main Function
@@ -103,8 +103,10 @@ def main():
     pickler = BATRPickle(in_file=CONFIG["input_mask_file"])
     store = []
     for frame_n in range(CONFIG["offset"], CONFIG["end"]):
+        print(frame_n)
+
         frame = cv2.cvtColor(video[frame_n], cv2.COLOR_BGR2RGB)
-        results = pickler.unpickle_file("frame_{:06d}".format(frame_n))
+        results = pickler.unpickle("frame_{:06d}".format(frame_n))
         r = results[0]
         n = r['rois'].shape[0]
         colors = visualize.random_colors(n)

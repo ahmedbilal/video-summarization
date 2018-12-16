@@ -21,10 +21,8 @@ def diff_perc(image1, image2):
 
 
 class BATRVideoCapture(object):
-    """
-        Author: Ahmed Bilal Khalid
-        Contributor: None
-    """
+    __author__ = "Ahmad Bilal Khalid"
+    __credits__ = None
 
     def __init__(self, file, offset=0):
         if os.path.isfile(file):
@@ -131,22 +129,22 @@ class BATRPickle(object):
         self.output_file.add(filename)
         os.remove(filename)
 
-    def unpickle(self):
-        """
-        Author: Ahmed Bilal Khalid
-        Contributor: None
+    # def unpickle(self):
+    #     """
+    #     Author: Ahmed Bilal Khalid
+    #     Contributor: None
+    #
+    #     Return an iterator to name of uncompressed and unpickled file member of self.input_file and its content
+    #     """
+    #
+    #     members = self.input_file.getmembers()
+    #     for member in members:
+    #         f = self.input_file.extractfile(member)
+    #         content = f.read()
+    #         uncompressed = zlib.decompress(content)
+    #         yield member.name, pickle.loads(uncompressed)
 
-        Return an iterator to name of uncompressed and unpickled file member of self.input_file and its content
-        """
-
-        members = self.input_file.getmembers()
-        for member in members:
-            f = self.input_file.extractfile(member)
-            content = f.read()
-            uncompressed = zlib.decompress(content)
-            yield member.name, pickle.loads(uncompressed)
-
-    def unpickle_file(self, filename):
+    def unpickle(self, filename):
         member = self.input_file.getmember("{}.pickled.zlibed".format(filename))
         f = self.input_file.extractfile(member)
         content = f.read()
@@ -166,14 +164,3 @@ class BATRPickle(object):
         
         if self.output_file:
             self.output_file.close()
-
-
-class BATRTar(tarfile.TarFile):
-    def allextractedfiles(self):
-        for member in self.getmembers():
-            f = self.extractfile(member)
-            yield f
-
-
-# For API Compatibility
-ABKVideoCapture = BATRVideoCapture

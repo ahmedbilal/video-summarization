@@ -1,11 +1,14 @@
 import operator
 import cv2
 import collections
+import sys
 
 from math import sqrt
 
-from .utilities.utils import BATRVideoCapture, BATRPickle
-from video_summarization.Mask_RCNN.mrcnn import visualize
+from utilities.utils import BATRVideoCapture, BATRPickle
+
+sys.path.append("Mask_RCNN")
+from mrcnn import visualize
 
 
 class Object(object):
