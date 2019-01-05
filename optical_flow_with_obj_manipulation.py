@@ -77,7 +77,7 @@
 #     return _store[-1][-1], len(_store) - 1
 #
 #
-# def track_for_object(frame, _store):
+# def draw_object_track(frame, _store):
 #     for o in _store:
 #         for _c, c in enumerate(o.centroids[:-1]):
 #             c_next = o.centroids[_c + 1]
@@ -146,7 +146,7 @@
 #     out_frame[out_frame >= 300] = 255
 #
 #     out_frame = np.uint8(out_frame)
-#     # # track_for_object(out_frame, store)
+#     # # draw_object_track(out_frame, store)
 #     cv2.imshow("output", out_frame)
 #
 #     if not run_video:
