@@ -3,7 +3,7 @@ import cv2
 import collections
 import sys
 import numpy as np
-
+import random
 from math import sqrt
 from utilities.utils import BATRPickle
 
@@ -135,18 +135,18 @@ class_names = ['BG', 'person', 'bicycle', 'car', 'motorcycle', 'airplane',
 
 class Config(object):
     offset = 1
-    end = 499
+    end = 1802
 
     input_video_file = "input/videos/ferozpurclip.mp4"
-    input_mask_file = "input/ferozpurmask.tar.gz"
+    input_mask_file = "input/maskrcnnasif.tar.xz"
 
-    display_video = True
+    display_video = False
     display_image = False
 
-    subtract_background = False
+    subtract_background = True
     background_file = "input/testavg.jpg"
 
-    create_masked_video = False
+    create_masked_video = True
     output_video_file = "output/ferozpur_back_subtract.avi"
     display_object_info = False
 
@@ -168,9 +168,9 @@ def main():
         background = cv2.imread(Config.background_file)
 
     pickler = BATRPickle(in_file=Config.input_mask_file)
-    store = []
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     for frame_n in range(Config.offset, Config.end):
+        store = []
         out_frame = np.copy(background)
         print(frame_n)
         frame = cv2.imread(f"input/videos/frames/frame{frame_n:06d}.jpg")
@@ -179,6 +179,7 @@ def main():
         r = results[0]
         n = r['rois'].shape[0]
         colors = visualize.random_colors(n)
+
 
         if Config.subtract_background:
             frame = (background - frame) + (frame - background)
@@ -198,7 +199,7 @@ def main():
             cy_axis = int((obj.ya + obj.yb) / 2)
             mask = np.float32(255 * r['masks'][:, :, i])
 
-            color_for_obj, obj_index, near_value = color_for_object(obj, store, colors)
+            # color_for_obj, obj_index, near_value = color_for_object(obj, store, colors)
 
             cv2.imwrite("mask.jpg", mask)
             # mask = None
@@ -221,16 +222,18 @@ def main():
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
 
-            if obj.type == "car":
-                # out_frame = visualize.apply_mask(frame, r['masks'][:, :, i], random.choice(colors))
-                out_frame[obj.ya:obj.yb, obj.xa:obj.xb] = output
+            out_frame = visualize.apply_mask(frame, r['masks'][:, :, i], random.choice(colors))
 
-                # cv2.putText(frame, "Frame # {}".format(frame_n),
-                #             (250, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_4)
-
-                if Config.display_object_info:
-                    cv2.putText(frame, "({},{},{})".format(cx_axis, cy_axis, obj.type),
-                                (cx_axis, cy_axis + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
+            # if obj.type == "car":
+            #     out_frame = visualize.apply_mask(frame, r['masks'][:, :, i], random.choice(colors))
+            #     # out_frame[obj.ya:obj.yb, obj.xa:obj.xb] = output
+            #
+            #     # cv2.putText(frame, "Frame # {}".format(frame_n),
+            #     #             (250, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_4)
+            #
+            #     if Config.display_object_info:
+            #         cv2.putText(frame, "({},{},{})".format(cx_axis, cy_axis, obj.type),
+            #                     (cx_axis, cy_axis + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
 
         # fgMask = backSub.apply(background_copy)
         # background_copy = frame
@@ -249,7 +252,7 @@ def main():
         #
         if Config.create_masked_video:
             # frame = cv2.cvtColor(background_copy, cv2.COLOR_BGR2RGB)
-            cv2.imwrite(f"output/frames/frame{frame_n:06d}.jpg", out_frame)
+            cv2.imwrite(f"output/ferozpur10012019_maskrcnn/frame{frame_n:06d}.jpg", out_frame)
             # output_video.write(np.uint8(out_frame))
 
     if Config.display_video:
