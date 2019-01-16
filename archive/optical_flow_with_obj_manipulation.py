@@ -77,7 +77,7 @@
 #     return _store[-1][-1], len(_store) - 1
 #
 #
-# def track_for_object(frame, _store):
+# def draw_object_track(frame, _store):
 #     for o in _store:
 #         for _c, c in enumerate(o.centroids[:-1]):
 #             c_next = o.centroids[_c + 1]
@@ -146,7 +146,7 @@
 #     out_frame[out_frame >= 300] = 255
 #
 #     out_frame = np.uint8(out_frame)
-#     # # track_for_object(out_frame, store)
+#     # # draw_object_track(out_frame, store)
 #     cv2.imshow("output", out_frame)
 #
 #     if not run_video:
@@ -162,14 +162,15 @@
 #     cv2.destroyAllWindows()
 
 
-import sys
+import collections
 import operator
+import sys
+import tarfile
+from math import sqrt
+
 import cv2
 import numpy as np
-import collections
-import tarfile
 from vi3o import Video
-from math import sqrt
 
 sys.path.append("Mask_RCNN")
 
@@ -216,7 +217,6 @@ def euclidean_distance(x2, y2, x1, y1):
 
 
 def bb_intersection_over_union(boxA, boxB):
-
     # determine the (x, y)-coordinates of the intersection rectangle
     xA = max(boxA[0], boxB[0])
     yA = max(boxA[1], boxB[1])
@@ -282,7 +282,6 @@ def bb_intersection_over_union(boxA, boxB):
 #     new_object = Object([_centroid], _image, _colors.pop())
 #     _store.append(new_object)
 #     return _store[-1].color, len(_store) - 1
-
 
 
 def color_for_object(_centroid, _image, _store, _colors, _bbox):
@@ -352,7 +351,6 @@ CONFIG["display_object_info"] = False
 CONFIG["create_video"] = True
 CONFIG["output_video_file"] = "output/wales_shortened_iou.avi"
 
-
 video = Video(CONFIG["input_video_file"])
 pickled_masks = BATRPickle(in_file=CONFIG["input_mask_file"])
 output_video = None
@@ -397,15 +395,18 @@ for frame_n in range(0, min(len(video), CONFIG["end"])):
         color_for_obj, obj_index, near_value = color_for_object(_centroid, detected_obj_image, store, colors, bbox)
 
         current_obj_mask = 1 * r['masks'][:, :, i]
-        value = sum(sum(binary_optical_flow[dim[0]:dim[2], dim[1]:dim[3]] * current_obj_mask[dim[0]:dim[2], dim[1]:dim[3]])) /\
+        value = sum(
+            sum(binary_optical_flow[dim[0]:dim[2], dim[1]:dim[3]] * current_obj_mask[dim[0]:dim[2], dim[1]:dim[3]])) / \
                 np.count_nonzero(current_obj_mask[dim[0]:dim[2], dim[1]:dim[3]] == 1)
         # cv2.imshow("meow", out_frame)
         if value > 30:
             out_frame = visualize.apply_mask(frame, r['masks'][:, :, i], color_for_obj)
 
             if CONFIG["display_object_info"]:
-                cv2.putText(out_frame, "({},{},{},{},{})".format(cx_axis, cy_axis, class_names[r['class_ids'][i]], obj_index, value),
-                    (cx_axis, cy_axis), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(out_frame,
+                            "({},{},{},{},{})".format(cx_axis, cy_axis, class_names[r['class_ids'][i]], obj_index,
+                                                      value),
+                            (cx_axis, cy_axis), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
                 # cv2.putText(out_frame,
                 #             "({})".format(str(near_value)),(cx_axis, cy_axis), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
 
@@ -427,7 +428,6 @@ for frame_n in range(0, min(len(video), CONFIG["end"])):
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             sys.exit(0)
-
 
 if CONFIG["create_video"] and output_video:
     output_video.release()

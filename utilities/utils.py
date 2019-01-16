@@ -2,6 +2,7 @@ import os
 import pickle
 import tarfile
 import zlib
+import hashlib
 
 import cv2
 import numpy as np
@@ -62,7 +63,7 @@ class BATRVideoCapture(object):
 
         return next(self.frames)
 
-    def create_substantial_motion_video(self, out_filename, fourcc_str="avc1"):
+    def create_substantial_motion_video(self, out_folder):
         """
         Author: Ahmed Bilal Khalid
         Contributor: None
@@ -73,21 +74,17 @@ class BATRVideoCapture(object):
         """
 
         _threshold = 0.5
-
-        fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
-        output_video = cv2.VideoWriter(out_filename, fourcc,
-                                       self.frames_per_second,
-                                       self.dimensions)
-
         last_frame = self.next_frame()
-
+        i = 1
+        j = 1
         for frame in self.frames:
+            print(f"Reduced Frame # {i} | Original Frame # {j}")
             diff = diff_perc(last_frame, frame)
             if diff > _threshold:
                 last_frame = frame
-                output_video.write(frame)
-
-        output_video.release()
+                cv2.imwrite(os.path.join(out_folder, f"frame{i:06d}.jpg"), frame)
+                i = i + 1
+            j = j + 1
 
     def get_background(self):
         background = np.float32(cv2.cvtColor(self.next_frame(), cv2.COLOR_BGR2RGB))
@@ -121,13 +118,13 @@ class BATRPickle(object):
 
         Compress obj using zlib and add that compressed obj to self.output_file
         """
-        filename = f"{filename}.pickled.zlibed"
+        _filename = f"{filename}.pickled.zlibed"
         serialized_obj = pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
         compressed = zlib.compress(serialized_obj, 9)
-        with open(filename, "wb") as f:
+        with open(_filename, "wb") as f:
             f.write(compressed)        
-        self.output_file.add(filename)
-        os.remove(filename)
+        self.output_file.add(_filename)
+        os.remove(_filename)
 
     # def unpickle(self):
     #     """
@@ -164,3 +161,37 @@ class BATRPickle(object):
         
         if self.output_file:
             self.output_file.close()
+
+
+def sha1(in_file):
+    _BUF_SIZE = 65536
+    _sha1 = hashlib.sha1()
+    with open(os.path.abspath(in_file), "rb") as f:
+        data = f.read(_BUF_SIZE)
+        while data:
+            _sha1.update(data)
+            data = f.read(_BUF_SIZE)
+
+    return _sha1.hexdigest()
+
+
+def extract_background(in_frame_folder, out_file_path):
+    in_frame_folder = os.path.abspath(in_frame_folder)
+    sorted_frames_filenames = sorted(os.listdir(in_frame_folder))
+
+    frame_path = os.path.join(in_frame_folder, sorted_frames_filenames[0])
+    first_frame = cv2.imread(frame_path)
+    background = np.float32(cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB))
+
+    for frame_n, frame_filename in enumerate(sorted_frames_filenames, start=1):
+        frame_path = os.path.join(in_frame_folder, frame_filename)
+
+        frame = cv2.imread(frame_path)
+        background = np.add(background, cv2.cvtColor(np.float32(frame), cv2.COLOR_BGR2RGB))
+
+    background = background / len(sorted_frames_filenames)
+    background = cv2.cvtColor(background.astype(np.uint8), cv2.COLOR_BGR2RGB)
+
+    cv2.imwrite(out_file_path, background)
+
+    return background
