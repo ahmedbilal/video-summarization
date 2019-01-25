@@ -127,7 +127,7 @@ def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
         nearest_obj_index = int(nearest_obj_index)
         previous_color = _store[nearest_obj_index].color
 
-        if nearest_obj_value >= 0.2 and _store[nearest_obj_index].type == obj.type \
+        if nearest_obj_value >= 0.5 and _store[nearest_obj_index].type == obj.type \
                 and obj_image.size and time.time() - _store[nearest_obj_index].last_appear < 3:
 
             found_obj = _store[nearest_obj_index]
@@ -147,6 +147,7 @@ def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
             _store[nearest_obj_index].bboxes.append(_bbox)
             _store[nearest_obj_index].masks.append(_mask_path)
             _store[nearest_obj_index].last_appear = time.time()
+            _store[nearest_obj_index].frame_n.append(_frame_n)
 
             return previous_color, nearest_obj_index, nearest_obj_value
 
@@ -166,14 +167,21 @@ def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
     return _store[-1].color, len(_store) - 1, nearest_obj_value
 
 
-def draw_object_track(_frame, _store, _obj_type=None):
-    for o in _store:
-        if (_obj_type and _obj_type == o.type) or not _obj_type:
+def draw_object_track(_frame, _frame_n, _obj_trails):
+    for o in _obj_trails:
+        if o.manipulated:
+            if not hasattr(o, "last_track_drawn"):
+                o.last_track_drawn = 0
+                o.last_appear = time.time()
+
+            o.last_track_drawn += 1
             if time.time() - o.last_appear < 3:
+                print(time.time() - o.last_appear)
                 color = [o.track_color[0] * 255, o.track_color[1] * 255, o.track_color[2] * 255]
                 prev = None
-                for c in o.centroids[-30:-1]:
+                for c in o.centroids[:o.last_track_drawn]:
                     if prev:
                         cv2.line(_frame, prev, (c.x, c.y), color, 2)
 
                     prev = c.x, c.y
+                o.last_appear = time.time()

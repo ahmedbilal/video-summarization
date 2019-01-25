@@ -1,10 +1,15 @@
+import math
+import operator
 import os
 import pickle
+import random
 
 import cv2
 import numpy as np
+
 from utilities.background_subtractor import background_sub
-from utilities.tracking import bb_intersection_over_union, track_object, draw_object_track
+from utilities.tracking import bb_intersection_over_union, track_object,\
+                               draw_object_track, random_color
 from utilities.utils import BATRPickle, sha1, extract_background
 from yolov3.yolov3 import Yolov3
 
@@ -110,79 +115,271 @@ def yolo_detector(in_frame_folder, out_file_name, start=1, end=None):
     del pickler
 
 
-def yolo_background_sub(in_frame_folder, in_detection_result_file, in_foreground_mask_folder,
-                        out_frame_folder, start=1, end=None, show_video=False, allowed_objects=None):
-    in_frame_folder = os.path.abspath(in_frame_folder)
-    out_frame_folder = os.path.abspath(out_frame_folder)
-    in_foreground_mask_folder = os.path.abspath(in_foreground_mask_folder)
+def nearest_neighbor_dist(obj, detected_obj):
+    # print("last_frame_detected_obj", detected_obj)
+    iou = dict()
+    for _o, _obj in enumerate(detected_obj):
+        _o = str(_o)
+        iou[_o] = bb_intersection_over_union(obj.bbox(), _obj.bbox())
+
+    if iou:
+        nearest_obj_index, nearest_obj_value = max(iou.items(), key=operator.itemgetter(1))
+        return nearest_obj_value
+    return math.inf
+
+
+def fill_missing_detection_using_features(in_frame_folder, in_detection_result_file):
+    print(cv2.getVersionMajor(), cv2.getVersionMinor())
     in_detection_result_file = os.path.abspath(in_detection_result_file)
 
-    background = cv2.imread("input/testavg.jpg")
-    background_float32 = np.float32(background)
     pickler = BATRPickle(in_file=in_detection_result_file)
-
     sorted_frames_filenames = sorted(os.listdir(in_frame_folder))
 
-    store = []
+    last_frame_detected_obj = []
+
+    start = 154
+    orb = cv2.ORB_create(nfeatures=10000, scoreType=cv2.ORB_FAST_SCORE)
+
+    # FLANN parameters
+    FLANN_INDEX_KDTREE = 0
+    index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+    search_params = dict(checks=50)  # or pass empty dictionary
+
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+    for frame_n, frame_filename in enumerate(sorted_frames_filenames[start:], start=start):
+        print(f"Frame # {frame_n}")
+        print("-" * 10)
+        frame_file_abs_path = os.path.join(in_frame_folder, frame_filename)
+
+        frame = cv2.imread(frame_file_abs_path)
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        detected_objects = pickler.unpickle(f"frame{frame_n:06d}")
+
+        for obj in detected_objects:
+            obj_img = frame_gray[obj.ya():obj.yb(), obj.xa():obj.xb()]
+            kp, des = orb.detectAndCompute(obj_img, None)
+            obj.keypoints = kp.copy()
+            obj.descriptors = np.float32(des)
+            obj.color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            # if len(obj.keypoints) < 2:
+            #     cv2.imshow("f", obj_img)
+            #     cv2.waitKey(0)
+            #     cv2.destroyAllWindows()
+
+        detected_objects = [obj for obj in detected_objects if len(obj.keypoints) > 0]
+
+        for obj in last_frame_detected_obj:
+            # fixing a bug where obj.type have prefix of "b'" and postfix of "'"
+            # this bug comes from Yolo V3 detection layer
+            if not hasattr(obj, "interpolated"):
+                obj.type = str(obj.type)[2:-1]
+
+            if len(obj.keypoints) < 2:
+                obj_img = frame_gray[obj.ya():obj.yb(), obj.xa():obj.xb()]
+                cv2.imshow("im", obj_img)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+
+                cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (255, 255, 255), 4)
+                continue
+
+            closest_neighbour = None
+
+            for _obj in detected_objects:
+                if len(_obj.descriptors) < 2:
+                    continue
+
+                matches = flann.knnMatch(obj.descriptors, _obj.descriptors, k=2)
+                good = []
+                for m, n in matches:
+                    if m.distance < 0.7 * n.distance:
+                        good.append(m)
+                if closest_neighbour is None:
+                    closest_neighbour = _obj, len(good)
+                else:
+                    if closest_neighbour[1] < len(good):
+                        closest_neighbour = _obj, len(good)
+            print("Best Match", obj, closest_neighbour)
+            if closest_neighbour is not None:
+                cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 255, 0), 4)
+            else:
+                cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 0, 255), 4)
+                cv2.putText(frame, obj.type, (obj.xa() + int(obj.w / 2), obj.ya() + int(obj.h / 2)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+        cv2.imshow("f", frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+        last_frame_detected_obj = detected_objects.copy()
+
+
+# def fill_missing_detection_using_features(in_frame_folder, in_foreground_mask_folder, in_detection_result_file,
+#                            in_optflow_folder):
+#     in_detection_result_file = os.path.abspath(in_detection_result_file)
+#
+#     pickler = BATRPickle(in_file=in_detection_result_file)
+#     sorted_frames_filenames = sorted(os.listdir(in_frame_folder))
+#
+#     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+#
+#     last_frame_detected_obj = []
+#
+#     start = 154
+#     orb = cv2.ORB()
+#
+#     for frame_n, frame_filename in enumerate(sorted_frames_filenames[start:], start=start):
+#         # print(frame_filename)
+#         print(f"Frame # {frame_n}")
+#         print("-" * 10)
+#         frame_file_abs_path = os.path.join(in_frame_folder, frame_filename)
+#         foreground_mask_abs_path = os.path.join(in_foreground_mask_folder, frame_filename)
+#
+#         frame = cv2.imread(frame_file_abs_path)
+#         orb.detectAndCompute()
+#         # mask = cv2.imread(foreground_mask_abs_path)
+#         # mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+#         # _, mask = cv2.threshold(mask, 200, 255, cv2.THRESH_BINARY)
+#
+#         detected_objects = pickler.unpickle(f"frame{frame_n:06d}")
+#
+#         for obj in last_frame_detected_obj:
+#             # fixing a bug where obj.type have prefix of "b'" and postfix of "'"
+#             # this bug comes from Yolo V3 detection layer
+#             if not hasattr(obj, "interpolated"):
+#                 obj.type = str(obj.type)[2:-1]
+#
+#             if obj.type in ["motorbike", "person"]:
+#                 cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 0, 255), 4)
+#                 cv2.putText(frame, obj.type,  (obj.xa() + int(obj.w/2), obj.ya() + int(obj.h/2)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+#                 continue
+#
+#             # print(f"{obj.bbox()}'s nearest neighbour is  {nearest_neighbor_dist(obj, detected_objects)} apart")
+#             nearest_neighbor_distance = nearest_neighbor_dist(obj, detected_objects)
+#             if nearest_neighbor_distance > 0.5:
+#                 # print(":) FOUND!")
+#                 if not hasattr(obj, "interpolated"):
+#                     cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 255, 0), 4)
+#                 else:
+#                     cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 255, 255), 4)
+#
+#             else:
+#                 # Orphaned Object
+#                 adopted = obj
+#                 opt_x = np.average(flow[adopted.xa():adopted.xb(), adopted.ya():adopted.yb(), 0])
+#                 opt_y = np.average(flow[adopted.xa():adopted.xb(), adopted.ya():adopted.yb(), 1])
+#
+#                 if math.isnan(opt_x) or math.isnan(opt_y):
+#                     opt_x = 0
+#                     opt_y = 0
+#                 else:
+#                     opt_x = round(opt_x, 1)
+#                     opt_y = round(opt_y, 1)
+#
+#                 print("OBJ", adopted.x, adopted.y)
+#                 print("OPT", opt_x, opt_y)
+#
+#                 adopted.x = int(adopted.x + round(opt_x, 2))
+#                 adopted.y = int(adopted.y + round(opt_y, 2))
+#
+#                 adopted.interpolated = True
+#                 detected_objects.append(adopted)
+#                 cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 255, 255), 4)
+#         last_frame_detected_obj = detected_objects.copy()
+#         # if len(orphaned_obj):
+#         #     print("Orphan ed Objects", orphaned_obj)
+#         cv2.imshow("f", frame)
+#         cv2.waitKey(0)
+#         cv2.destroyAllWindows()
+
+
+def fill_missing_detection(in_frame_folder, in_foreground_mask_folder, in_detection_result_file,
+                           in_optflow_folder):
+    in_detection_result_file = os.path.abspath(in_detection_result_file)
+
+    pickler = BATRPickle(in_file=in_detection_result_file)
+    sorted_frames_filenames = sorted(os.listdir(in_frame_folder))
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
 
-    for frame_n, frame_filename in enumerate(sorted_frames_filenames, start=start):
-        out_frame = np.copy(background)
+    last_frame_detected_obj = []
 
+    start = 154
+    for frame_n, frame_filename in enumerate(sorted_frames_filenames[start:], start=start):
+        # print(frame_filename)
+        print(f"Frame # {frame_n}")
+        print("-" * 10)
         frame_file_abs_path = os.path.join(in_frame_folder, frame_filename)
         foreground_mask_abs_path = os.path.join(in_foreground_mask_folder, frame_filename)
-        detected_objects = pickler.unpickle(f"frame{frame_n:06d}")
+        optical_flow_abs_path = os.path.join(in_optflow_folder, f"frame{frame_n:06d}.flo")
+        flow = np.load(optical_flow_abs_path)
+
+        mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1], angleInDegrees=True)
+
         frame = cv2.imread(frame_file_abs_path)
+
         mask = cv2.imread(foreground_mask_abs_path)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
         _, mask = cv2.threshold(mask, 200, 255, cv2.THRESH_BINARY)
 
-        _alpha = np.float32(mask) / 255
-
-        for obj in detected_objects:
-            # fixing a bug where obj.type have prefix of "b'" and postfix ofq "'"
+        detected_objects = pickler.unpickle(f"frame{frame_n:06d}")
+        orphaned_obj = []
+        # print("Objects")
+        # print(detected_objects)
+        for obj in last_frame_detected_obj:
+            # fixing a bug where obj.type have prefix of "b'" and postfix of "'"
             # this bug comes from Yolo V3 detection layer
-            obj.type = str(obj.type)[2:-1]
-            if allowed_objects is not None and obj.type not in allowed_objects:
+            if not hasattr(obj, "interpolated"):
+                obj.type = str(obj.type)[2:-1]
+
+            if obj.type in ["motorbike", "person"]:
+                cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 0, 255), 4)
+                # print("Not wanted", obj.type)
+                cv2.putText(frame, obj.type,  (obj.xa() + int(obj.w/2), obj.ya() + int(obj.h/2)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                 continue
+            # print(f"{obj.bbox()}'s nearest neighbour is  {nearest_neighbor_dist(obj, detected_objects)} apart")
+            nearest_neighbor_distance = nearest_neighbor_dist(obj, detected_objects)
+            if nearest_neighbor_distance > 0.5:
+                # print(":) FOUND!")
+                if not hasattr(obj, "interpolated"):
+                    cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 255, 0), 4)
+                else:
+                    cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 255, 255), 4)
 
-            obj_image = frame[obj.ya():obj.yb(), obj.xa():obj.xb()]
+            else:
+                # print(":( NOT FOUND!")
+                orphaned_obj.append(obj)
+                adopted = obj
+                opt_x = np.average(flow[adopted.xa():adopted.xb(), adopted.ya():adopted.yb(), 0])
+                opt_y = np.average(flow[adopted.xa():adopted.xb(), adopted.ya():adopted.yb(), 1])
 
-            _forg = np.float32(obj_image)
+                if math.isnan(opt_x) or math.isnan(opt_y):
+                    opt_x = 0
+                    opt_y = 0
+                else:
+                    opt_x = round(opt_x, 1)
+                    opt_y = round(opt_y, 1)
 
-            _back = background_float32[obj.ya():obj.yb(), obj.xa():obj.xb()]
+                print("OBJ", adopted.x, adopted.y)
+                print("OPT", opt_x, opt_y)
 
-            _forg = cv2.multiply(_alpha[obj.ya():obj.yb(), obj.xa():obj.xb()], _forg)
-            _back = cv2.multiply(1.0 - _alpha[obj.ya():obj.yb(), obj.xa():obj.xb()], _back)
+                adopted.x = int(adopted.x + round(opt_x, 2))
+                adopted.y = int(adopted.y + round(opt_y, 2))
 
-            output = cv2.add(_forg, _back)
-            if output is not None:
-                track_object(obj=obj, obj_mask=mask, obj_image=output, _store=store)
-                out_frame[obj.ya():obj.yb(), obj.xa():obj.xb()] = output
-        draw_object_track(out_frame, store)
-        #
-        # if output is not None:
-        #     cv2.imshow("image", output/255.0)
-        #     cv2.waitKey(0)
-        #     cv2.destroyAllWindows()
-        # cv2.imwrite("{}/frame{:06d}.jpg".format(out_frame_folder, frame_n), out_frame)
-        print(frame_n)
-        if show_video:
-            cv2.imshow("image", out_frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-
-        if frame_n == end:
-            break
-    with open("results.pickled", "wb") as f:
-        pickle.dump(store, f)
-
-    cv2.destroyAllWindows()
+                adopted.interpolated = True
+                detected_objects.append(adopted)
+                cv2.rectangle(frame, (obj.xa(), obj.ya()), (obj.xb(), obj.yb()), (0, 255, 255), 4)
+        last_frame_detected_obj = detected_objects.copy()
+        # if len(orphaned_obj):
+        #     print("Orphan ed Objects", orphaned_obj)
+        cv2.imshow("f", frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
 
 def yolo_object_tracker(in_frame_folder, in_detection_result_file, in_foreground_mask_folder, _store_path,
-                        _store_data_path, start=1, end=None, allowed_objects=None):
+                        _store_data_path, start=1, end=None):
     in_frame_folder = os.path.abspath(in_frame_folder)
     in_foreground_mask_folder = os.path.abspath(in_foreground_mask_folder)
     in_detection_result_file = os.path.abspath(in_detection_result_file)
@@ -201,15 +398,11 @@ def yolo_object_tracker(in_frame_folder, in_detection_result_file, in_foreground
         detected_objects = pickler.unpickle(f"frame{frame_n:06d}")
         frame = cv2.imread(frame_file_abs_path)
         mask = cv2.imread(foreground_mask_abs_path)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        _, mask = cv2.threshold(mask, 200, 255, cv2.THRESH_BINARY)
 
         for obj in detected_objects:
-            # fixing a bug where obj.type have prefix of "b'" and postfix ofq "'"
+            # fixing a bug where obj.type have prefix of "b'" and postfix of "'"
             # this bug comes from Yolo V3 detection layer
             obj.type = str(obj.type)[2:-1]
-            if allowed_objects is not None and obj.type not in allowed_objects:
-                continue
 
             obj_image = frame[obj.ya():obj.yb(), obj.xa():obj.xb()]
             obj_mask = mask[obj.ya():obj.yb(), obj.xa():obj.xb()]
@@ -228,10 +421,34 @@ def yolo_object_tracker(in_frame_folder, in_detection_result_file, in_foreground
     cv2.destroyAllWindows()
 
 
+def apply_mask(image, mask, bbox, background):
+    """
+    :param image: Object's Image
+    :param mask: Object's Mask
+    :param bbox: Object's bbox
+    :param background: Background Image where the object is to placed
+    :return:
+    """
+    _forg = np.float32(image)
+
+    _alpha = np.float32(mask) / 255
+
+    _back = background[bbox.ya():bbox.yb(), bbox.xa():bbox.xb()]
+
+    _forg = cv2.multiply(_alpha, _forg)
+    _back = cv2.multiply(1.0 - _alpha, _back)
+
+    output = cv2.add(_forg, _back)
+    return output
+
+
 def process_yolo_background_sub(in_results_file, out_frame_folder,
-                                in_background_file, start=1,
-                                end=None, show_video=False,
+                                in_background_file, show_video=False,
                                 allowed_objects=None):
+
+    if allowed_objects is None:
+        allowed_objects = ["car"]
+
     in_results_file = os.path.abspath(in_results_file)
 
     background = cv2.imread(in_background_file)
@@ -239,106 +456,80 @@ def process_yolo_background_sub(in_results_file, out_frame_folder,
     with open(in_results_file, "rb") as f:
         store = pickle.load(f)
 
-    # print("len(store)", len(store))
-
     # only preserve obj which appears atleast in 20 frames
-    store = [obj for obj in store if len(obj.images) >= 20]
-    # print("len(store)", len(store))
+    store = [obj for obj in store if (len(obj.images) >= 20 and obj.type in allowed_objects)]
 
     for obj in store:
-        # n = -3
-        # obj.images = obj.images[:n]
-        # obj.bboxes = obj.bboxes[:n]
-        # obj.masks = obj.masks[:n]
-        print(os.path.abspath(obj.images[len(obj.images) // 2]))
         obj.manipulated = False
 
-    for frame_n in range(600):
+    obj_trails = []
+
+    for frame_n in range(1, 600):
         print(f"Frame # {frame_n}")
+
         out_frame = np.copy(background)
+        out_frame_path = os.path.join(out_frame_folder, f"frame{frame_n:06d}.jpg")
+
         filled_locations = []
         store.sort(key=lambda x: x.manipulated, reverse=True)
 
         for obj_i, obj in enumerate(store):
-            # obj.bboxes = obj.bboxes[-10:]
-            # obj.masks = obj.masks[-10:]
-            # obj.images = obj.images[-10:]
-
-            if len(obj.images) == 0:
-                continue
-
-            if obj.manipulated:
-                # if not is_spot_available(obj.bboxes[0], filled_locations):
-                #     continue
-                obj_image = cv2.imread(obj.images.pop(0))
-                obj_mask = cv2.imread(obj.masks.pop(0))
-                obj_bbox = obj.bboxes.pop(0)
-                obj_bbox_wth_class = [obj_bbox.xa(), obj_bbox.ya(), obj_bbox.xb(), obj_bbox.yb()]
-                filled_locations.append(obj_bbox_wth_class)
-
-                # cv2.imwrite(f"output/talha/mask{frame_ n},{obj_i}.jpg", obj_mask)
-                # cv2.imwrite(f"output/talha/image{frame_n},{obj_i}.jpg", obj_image)
-
-                _forg = np.float32(obj_image)
-
-                _alpha = np.float32(obj_mask) / 255
-
-                _back = background_float32[obj_bbox.ya():obj_bbox.yb(), obj_bbox.xa():obj_bbox.xb()]
-
-                _forg = cv2.multiply(_alpha, _forg)
-                _back = cv2.multiply(1.0 - _alpha, _back)
-
-                output = cv2.add(_forg, _back)
-                if output is not None:
-                    out_frame[obj_bbox.ya():obj_bbox.yb(), obj_bbox.xa():obj_bbox.xb()] = output
-                    # font = cv2.FONT_HERSHEY_SIMPLEX
-                    # cv2.putText(out_frame, f"{obj.serial},{len(obj.images)}", (obj_bbox.xa() + obj_bbox.w//2,
-                    #                                                            obj_bbox.ya() + obj_bbox.h//2),
-                    #             font, 0.5, (255, 0, 0), 2, cv2.LINE_AA)
-
-            else:
-                good_bbox_i = available_loc(obj.bboxes[:-5], filled_locations)
-                if good_bbox_i is not None:
-                    obj.images = obj.images[good_bbox_i:]
-                    obj.bboxes = obj.bboxes[good_bbox_i:]
-                    obj.masks = obj.masks[good_bbox_i:]
-
+            if len(obj.images) > 0:
+                if obj.manipulated:
                     obj_image = cv2.imread(obj.images.pop(0))
                     obj_mask = cv2.imread(obj.masks.pop(0))
                     obj_bbox = obj.bboxes.pop(0)
-
-                    obj.manipulated = True
-
                     obj_bbox_wth_class = [obj_bbox.xa(), obj_bbox.ya(), obj_bbox.xb(), obj_bbox.yb()]
                     filled_locations.append(obj_bbox_wth_class)
 
-                    # cv2.imwrite(f"output/talha/mask{frame_ n},{obj_i}.jpg", obj_mask)
-                    # cv2.imwrite(f"output/talha/image{frame_n},{obj_i}.jpg", obj_image)
+                    output = apply_mask(obj_image, obj_mask, obj_bbox, background_float32)
 
-                    _forg = np.float32(obj_image)
-
-                    _alpha = np.float32(obj_mask) / 255
-
-                    _back = background_float32[obj_bbox.ya():obj_bbox.yb(), obj_bbox.xa():obj_bbox.xb()]
-
-                    _forg = cv2.multiply(_alpha, _forg)
-                    _back = cv2.multiply(1.0 - _alpha, _back)
-
-                    output = cv2.add(_forg, _back)
                     if output is not None:
                         out_frame[obj_bbox.ya():obj_bbox.yb(), obj_bbox.xa():obj_bbox.xb()] = output
-                        # font = cv2.FONT_HERSHEY_SIMPLEX
-                        # cv2.putText(out_frame, f"{obj.serial},{len(obj.images)}, {good_bbox_i}",
-                        #             (obj_bbox.xa() + obj_bbox.w // 2, obj_bbox.ya() + obj_bbox.h // 2),
+                        font = cv2.FONT_HERSHEY_SIMPLEX
+                        cv2.putText(out_frame, f"{obj.serial},{len(obj.images)}",
+                                    (obj_bbox.xa() + obj_bbox.w // 2, obj_bbox.ya() + obj_bbox.h // 2),
+                                    font, 0.5, (255, 0, 0), 2, cv2.LINE_AA)
+                        # cv2.putText(out_frame, f"{obj.serial},{len(obj.images)}", (obj_bbox.xa() + obj_bbox.w//2,
+                        #                                                            obj_bbox.ya() + obj_bbox.h//2),
                         #             font, 0.5, (255, 0, 0), 2, cv2.LINE_AA)
 
-        out_frame_path = os.path.join(out_frame_folder, f"frame{frame_n:06d}.jpg")
+                else:
+                    good_bbox_i = available_loc(obj.bboxes[:-5], filled_locations)
+                    if good_bbox_i is not None:
+                        obj.images = obj.images[good_bbox_i:]
+                        obj.bboxes = obj.bboxes[good_bbox_i:]
+                        obj.masks = obj.masks[good_bbox_i:]
+                        obj.centroids = obj.centroids[good_bbox_i:]
+
+                        obj_image = cv2.imread(obj.images.pop(0))
+                        obj_mask = cv2.imread(obj.masks.pop(0))
+                        obj_bbox = obj.bboxes.pop(0)
+
+                        obj.manipulated = True
+
+                        obj_trails.append(obj)
+
+                        obj_bbox_wth_class = [obj_bbox.xa(), obj_bbox.ya(), obj_bbox.xb(), obj_bbox.yb()]
+                        filled_locations.append(obj_bbox_wth_class)
+
+                        output = apply_mask(obj_image, obj_mask, obj_bbox, background_float32)
+
+                        if output is not None:
+                            out_frame[obj_bbox.ya():obj_bbox.yb(), obj_bbox.xa():obj_bbox.xb()] = output
+                            font = cv2.FONT_HERSHEY_SIMPLEX
+                            cv2.putText(out_frame, f"{obj.serial},{len(obj.images)}, {good_bbox_i}",
+                                        (obj_bbox.xa() + obj_bbox.w // 2, obj_bbox.ya() + obj_bbox.h // 2),
+                                        font, 0.5, (255, 0, 0), 2, cv2.LINE_AA)
+
+        draw_object_track(out_frame, _frame_n=frame_n, _obj_trails=obj_trails)
         cv2.imwrite(out_frame_path, out_frame)
-        # cv2.imshow("image", out_frame)
+
+        cv2.imshow("image", out_frame)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
-        # if cv2.wai    tKey(1) & 0xFF == ord('q'):
-        #     break
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
     cv2.destroyAllWindows()
 
 
@@ -427,45 +618,13 @@ def yolo_deeplab(in_frame_folder, in_detection_result_file, in_mask_file, out_fr
     cv2.destroyAllWindows()
 
 
-# def background_sub(in_frame_folder, out_frame_folder, start=1, end=None, show_video=False):
-#     in_frame_folder = os.path.abspath(in_frame_folder)
-#     out_frame_folder = os.path.abspath(out_frame_folder)
-#
-#     sorted_frames_filenames = sorted(os.listdir(in_frame_folder))
-#
-#     frame_filename = os.path.join(in_frame_folder, sorted_frames_filenames[0])
-#     background = cv2.imread(frame_filename)
-#     background_gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
-#
-#     for frame_n, frame_filename in enumerate(sorted_frames_filenames, start=start + 1):
-#         frame_filename = os.path.join(in_frame_folder, frame_filename)
-#         frame = cv2.imread(frame_filename)
-#         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-#         frame_gray = cv2.GaussianBlur(frame_gray, (5, 5), 0)
-#
-#         difference = cv2.absdiff(background_gray, frame_gray)
-#         _, difference = cv2.threshold(difference, 25, 255, cv2.THRESH_BINARY)
-#
-#         ret, thresh = cv2.threshold(difference, 127, 255, 0)
-#         im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-#         cv2.drawContours(im2, contours, -1, (0, 255, 0), 3)
-#
-#         # cv2.imwrite(f"{out_frame_folder}/frame{frame_n:06d}.jpg", difference)
-#         # print(frame_n)
-#         if show_video:
-#             cv2.imshow("image", im2)
-#             if cv2.waitKey(1) & 0xFF == ord('q'):
-#                 break
-#         # else:
-#         #     cv2.waitKey(0)
-#         #     cv2.destroyAllWindows()
-#         if frame_n == end:
-#             break
-#
-#     cv2.destroyAllWindows()
+def create_summary(in_video, allowed_objects=None,
+                   force_video_to_frames=False, force_background_extraction=False,
+                   force_detection=False, force_foreground_computation=False,
+                   force_object_tracking=False, force_create_summarized_video=False):
+    if allowed_objects is None:
+        allowed_objects = ["car"]
 
-
-def create_summary(in_video, allowed_objects=["car"]):
     in_video = os.path.abspath(in_video)
     video_hash = sha1(in_video)
     new_dir_path = os.path.join("processing", video_hash)
@@ -482,7 +641,7 @@ def create_summary(in_video, allowed_objects=["car"]):
 
     # Create frames directory
     frames_dir_path = os.path.join(new_dir_path, "frames")
-    if not os.path.exists(frames_dir_path):
+    if not os.path.exists(frames_dir_path) or force_video_to_frames:
         print("3. Video To Frames Conversion Initiated.")
         os.mkdir(frames_dir_path)
         os.system(f"ffmpeg -i {in_video} -vf fps=30 -qscale:v 5 {os.path.join(frames_dir_path, 'frame%06d.jpg')}")
@@ -493,83 +652,67 @@ def create_summary(in_video, allowed_objects=["car"]):
         print("4. Result directory Creation Initiated.")
         os.mkdir(result_dir_path)
 
-    # Compute Background Frame
+    # Background Extraction
     background_path = os.path.join(result_dir_path, "background.jpeg")
-    if not os.path.exists(background_path):
+    if not os.path.exists(background_path) or force_background_extraction:
         print("5. Background Extraction Initiated.")
         extract_background(frames_dir_path, background_path)
 
     # Detect Objects using YOLO v3
     detection_results_path = os.path.join(result_dir_path, "detections.tar.gz")
-    if not os.path.exists(detection_results_path):
+    if not os.path.exists(detection_results_path) or force_detection:
         print("5. Object Detection Initiated.")
         yolo_detector(frames_dir_path, detection_results_path)
 
     # Create foreground mask directory
     foreground_mask_dir_path = os.path.join(new_dir_path, "forground_masks")
-    if not os.path.exists(foreground_mask_dir_path):
+    if not os.path.exists(foreground_mask_dir_path) or force_foreground_computation:
         print("6. Foreground Computation Initiated.")
 
-        os.mkdir(foreground_mask_dir_path)
+        if not os.path.exists(foreground_mask_dir_path):
+            os.mkdir(foreground_mask_dir_path)
 
         # Create Foreground Masks
         background_sub(in_frame_folder=frames_dir_path,
                        out_frame_folder=foreground_mask_dir_path)
 
-    # Track Object (Path)
+    # Track Object
     _store_path = os.path.join(result_dir_path, "object_store.pickled")
     _store_data_path = os.path.join(result_dir_path, "store")
 
-    if not os.path.exists(_store_path) or not os.path.exists(_store_data_path):
+    if not os.path.exists(_store_path) or not os.path.exists(_store_data_path) or force_object_tracking:
         print("7. Object Tracking Initiated.")
-        os.mkdir(_store_data_path)
+        if not os.path.exists(_store_data_path):
+            os.mkdir(_store_data_path)
 
         yolo_object_tracker(in_frame_folder=frames_dir_path,
                             in_detection_result_file=detection_results_path,
                             in_foreground_mask_folder=foreground_mask_dir_path,
-                            allowed_objects=allowed_objects,
                             _store_path=_store_path,
                             _store_data_path=_store_data_path)
 
     # Create summarized video
     summarized_frames_path = os.path.join(new_dir_path, "summarized_frames")
-    if not os.path.exists(summarized_frames_path):
+    if not os.path.exists(summarized_frames_path) or force_create_summarized_video:
         print("8. Summarized Video Creation Initiated.")
 
-        os.mkdir(summarized_frames_path)
+        if not os.path.exists(summarized_frames_path):
+            os.mkdir(summarized_frames_path)
 
         process_yolo_background_sub(in_results_file=_store_path,
                                     in_background_file=background_path,
                                     out_frame_folder=summarized_frames_path,
-                                    show_video=True,
+                                    show_video=False,
                                     allowed_objects=allowed_objects)
+
+    # fill_missing_detection_using_features(in_frame_folder=frames_dir_path,
+    #                                       in_detection_result_file=detection_results_path)
 
     print("Summarized Video Created")
 
 
 def main():
-    create_summary("input/videos/ferozpurclip.mp4")
-    # yolo_drawbbox("input/videos/frames", "output/ferozpur06012019_yolov3.tar.gz", "output/yolo", show_video=True)
-    # background_ext(in_frame_folder="input/videos/frames",
-    #                  out_frame_folder="output/ferozpur_bs_without_transformation")
-    # yolo_deeplab(in_frame_folder="input/videos/frames", in_detection_result_file="output/ferozpur23122018(1).tar.gz",
-    #              in_mask_file="input/deeplabmasks.tar.gz", out_frame_folder="output/frames03012019", show_video=False)
-    #
-    # yolo_background_sub(in_frame_folder="input/videos/frames",
-    #                     in_detection_result_file="output/ferozpur06012019_yolov3.tar.gz",
-    #                     in_foreground_mask_folder="output/ferozpur_bs",
-    #                     out_frame_folder="output/frames03012019", show_video=False,
-    #                     allowed_objects=["car"])
-    # yolo_object_tracker(in_frame_folder="input/videos/frames",
-    #                     in_detection_result_file="output/ferozpur06012019_yolov3.tar.gz",
-    #                     in_foreground_mask_folder="output/ferozpur_bs",
-    #                     allowed_objects=["car"])
-    # process_yolo_background_sub(in_results_file="results.pickled",
-    #                             out_frame_folder="output/frames03012019", show_video=True,
-    #                             allowed_objects=["car"])
-
-    # video = BATRVideoCapture("/home/meow/Desktop/slides/videos/ferozpur.mp4")
-    # video.create_substantial_motion_video("output/ferozpur_substantial")
+    create_summary("videos/ferozpurclip.mp4", force_create_summarized_video=True)
 
 
 main()

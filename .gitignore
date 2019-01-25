@@ -4,10 +4,14 @@ __pycache__
 .idea
 yolov3
 Mask_RCNN/
-input/
-output/
-pyflow/
 processing
+videos
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Virtual Env
+venv
+
+# KDE
+.directory

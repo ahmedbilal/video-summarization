@@ -1,7 +1,6 @@
 import os
 
 import cv2
-import fire
 
 
 def background_sub(in_frame_folder, out_frame_folder, thresholded=True, start=1, end=None):
@@ -31,6 +30,7 @@ def background_sub(in_frame_folder, out_frame_folder, thresholded=True, start=1,
 
         mask = foreground_map.apply(frame)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        _, mask = cv2.threshold(mask, 200, 255, cv2.THRESH_BINARY)
 
         cv2.imwrite(f"{out_frame_folder}/frame{frame_n:06d}.jpg", mask)
 
