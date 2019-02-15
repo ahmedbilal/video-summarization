@@ -4,14 +4,42 @@ Video summarization is used to create a summarized video with user specified fea
 
 ## Development Environment Setup
 Run the following command to make your development environment identical to that of Ahmad Bilal Khalid (ABK).
-### Ubuntu
 
-Run the following commands one by one with patience as they can take
-some time.
+### Manjaro
 
+1. Enable AUR packages
+2. Install **python36** from AUR
+3. Install **pip** for python3.6
+
+Run the following command if you have Nvidia Cuda Enabled GPU
 ```bash
-chmod +x ./setup.sh && export PYTHON=python3 && ./setup.sh
+sudo ln -s /opt/cuda/ /usr/local/cuda
 ```
+
+Run these command one by one
+```bash
+git clone https://github.com/ahmedbilal/video_summarization.git --depth=1
+cd video_summarization
+git clone https://github.com/ahmedbilal/yolov3.git --depth=1
+git clone https://github.com/matterport/Mask_RCNN.git --depth=1
+cd yolov3 && make
+mkdir weight
+cd weight
+wget https://pjreddie.com/media/files/yolov3.weights
+cd ../../
+
+sudo pip3.6 install -r requirements.txt
+
+python3 main.py
+```
+
+
+## Todo
+- \[x] Create Summarized Video
+- \[ ] Fix Issues with Summarized Video
+- \[ ] Helmet Detection
+- \[ ] Speed Detection
+- \[ ] Density Detection
 
 
 ## References

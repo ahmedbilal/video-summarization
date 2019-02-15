@@ -3,6 +3,8 @@ import time
 import os
 import cv2
 import operator
+import math
+from utilities.utils import BATRPickle
 
 
 class StoredObject(object):
@@ -72,7 +74,11 @@ def random_color():
     return random.random(), random.random(), random.random()
 
 
-def bb_intersection_over_union(box_a, box_b):
+def random_rgb():
+    return random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)
+
+
+def intersection(box_a, box_b):
     # determine the (x, y)-coordinates of the intersection rectangle
     x_a = max(box_a[0], box_b[0])
     y_a = max(box_a[1], box_b[1])
@@ -81,6 +87,12 @@ def bb_intersection_over_union(box_a, box_b):
 
     # compute the area of intersection rectangle
     inter_area = max(0, x_b - x_a + 1) * max(0, y_b - y_a + 1)
+
+    return inter_area
+
+
+def bb_intersection_over_union(box_a, box_b):
+    inter_area = intersection(box_a, box_b)
 
     # compute the area of both the prediction and ground-truth
     # rectangles
@@ -96,6 +108,18 @@ def bb_intersection_over_union(box_a, box_b):
     return iou
 
 
+def nearest_neighbor_dist(obj, detected_obj):
+    iou = dict()
+    for _o, _obj in enumerate(detected_obj):
+        _o = str(_o)
+        iou[_o] = bb_intersection_over_union(obj.bbox(), _obj.bbox())
+
+    if iou:
+        nearest_obj_index, nearest_obj_value = max(iou.items(), key=operator.itemgetter(1))
+        return nearest_obj_value
+    return math.inf
+
+
 def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
     """
     Auhor: Ahmad Bilal Khalid
@@ -108,7 +132,7 @@ def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
     :type obj: DetectedObject
     """
 
-    _bbox = [obj.xa(), obj.ya(), obj.xb(), obj.yb()]
+    _bbox = obj.xa(), obj.ya(), obj.xb(), obj.yb()
     cx_axis = int((obj.xa() + obj.xb()) / 2)
     cy_axis = int((obj.ya() + obj.yb()) / 2)
     _centroid = Centroid(cx_axis, cy_axis)
@@ -121,16 +145,16 @@ def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
         distances[str(_o)] = bb_intersection_over_union(_bbox, o_bbox)
 
     _bbox = BBox(obj.x, obj.y, obj.w, obj.h)
-    nearest_obj_value = None
+    max_iou_obj_value = None
     if distances:
-        nearest_obj_index, nearest_obj_value = max(distances.items(), key=operator.itemgetter(1))
-        nearest_obj_index = int(nearest_obj_index)
-        previous_color = _store[nearest_obj_index].color
+        max_iou_obj_index, max_iou_obj_value = max(distances.items(), key=operator.itemgetter(1))
+        max_iou_obj_index = int(max_iou_obj_index)
+        previous_color = _store[max_iou_obj_index].color
 
-        if nearest_obj_value >= 0.5 and _store[nearest_obj_index].type == obj.type \
-                and obj_image.size and time.time() - _store[nearest_obj_index].last_appear < 3:
+        if max_iou_obj_value >= 0.5 and _store[max_iou_obj_index].type == obj.type \
+                and obj_image.size and abs(_store[max_iou_obj_index].frame_n[-1] - _frame_n) < 30:
 
-            found_obj = _store[nearest_obj_index]
+            found_obj = _store[max_iou_obj_index]
             found_obj.centroids.append(_centroid)
             found_obj.last_appear = time.time()
 
@@ -143,13 +167,13 @@ def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
             cv2.imwrite(_image_path, obj_image)
             cv2.imwrite(_mask_path, obj_mask)
 
-            _store[nearest_obj_index].images.append(_image_path)
-            _store[nearest_obj_index].bboxes.append(_bbox)
-            _store[nearest_obj_index].masks.append(_mask_path)
-            _store[nearest_obj_index].last_appear = time.time()
-            _store[nearest_obj_index].frame_n.append(_frame_n)
+            _store[max_iou_obj_index].images.append(_image_path)
+            _store[max_iou_obj_index].bboxes.append(_bbox)
+            _store[max_iou_obj_index].masks.append(_mask_path)
+            _store[max_iou_obj_index].last_appear = time.time()
+            _store[max_iou_obj_index].frame_n.append(_frame_n)
 
-            return previous_color, nearest_obj_index, nearest_obj_value
+            return previous_color, max_iou_obj_index, max_iou_obj_value
 
     stored_obj = StoredObject(centroid=_centroid, _image=None,
                               _color=random_color(), _bbox=_bbox,
@@ -164,24 +188,4 @@ def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
     _store[-1].images = [image_path]
     _store[-1].masks = [mask_path]
 
-    return _store[-1].color, len(_store) - 1, nearest_obj_value
-
-
-def draw_object_track(_frame, _frame_n, _obj_trails):
-    for o in _obj_trails:
-        if o.manipulated:
-            if not hasattr(o, "last_track_drawn"):
-                o.last_track_drawn = 0
-                o.last_appear = time.time()
-
-            o.last_track_drawn += 1
-            if time.time() - o.last_appear < 3:
-                print(time.time() - o.last_appear)
-                color = [o.track_color[0] * 255, o.track_color[1] * 255, o.track_color[2] * 255]
-                prev = None
-                for c in o.centroids[:o.last_track_drawn]:
-                    if prev:
-                        cv2.line(_frame, prev, (c.x, c.y), color, 2)
-
-                    prev = c.x, c.y
-                o.last_appear = time.time()
+    return _store[-1].color, len(_store) - 1, max_iou_obj_value

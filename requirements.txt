@@ -6,3 +6,4 @@ imgaug
 'setuptools<=39.1.0'
 wheel
 tensorflow
+IPython

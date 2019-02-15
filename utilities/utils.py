@@ -8,6 +8,11 @@ import cv2
 import numpy as np
 
 
+def bbox_to_roi(bbox):
+    x, y, w, h = bbox
+    return x, y, x + h, y + w
+
+
 def diff_perc(image1, image2):
     """
         Author: Ahmed Bilal Khalid

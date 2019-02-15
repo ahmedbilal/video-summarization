@@ -1,11 +1,14 @@
+# Cache
 __pycache__
-.vscode/
-.vscode
-.idea
-yolov3
-Mask_RCNN/
+
+# Directories
 processing
 videos
+output
+
+# Other Git Repo
+yolov3
+Mask_RCNN
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -13,5 +16,12 @@ videos
 # Virtual Env
 venv
 
-# KDE
+# KDE specific files
 .directory
+
+# IDE's specific files
+.vscode
+.idea
+
+# Ignore commit message file
+.commit_msg
