@@ -83,6 +83,8 @@ def yolo_detector(in_frame_folder, out_file_name, start=1, end=None):
     in_frame_folder = os.path.abspath(in_frame_folder)
     out_file_name = os.path.abspath(out_file_name)
 
+    print(in_frame_folder, out_file_name)
+
     obj_detector = Yolov3()
     pickler = BATRPickle(out_file=out_file_name)
 
@@ -194,12 +196,14 @@ def improved_fill_missing_detection(in_frame_folder, in_detection_result_file):
         # Track these missed object in current frame
         for obj in missed_obj:
             nn_index, nn_distance = nearest_neighbor(obj, detected_objects)
-
+            nn_index = nn_index
             # Double Check. May be it is already being tracked.
-            intersect = intersection(obj.bbox(), detected_objects[nn_index].bbox())
 
-            if intersect/(obj.w * obj.h) > 0.7:
-                continue
+            if not math.isinf(nn_index):
+                intersect = intersection(obj.bbox(), detected_objects[nn_index].bbox())
+
+                if intersect/(obj.w * obj.h) > 0.7:
+                    continue
                 # cv2.rectangle(frame, obj.pt_a(), obj.pt_b(), COLOR['blue'], 6)
             #
             # if nn_distance > 0.5 and not math.isinf(nn_distance):
@@ -534,32 +538,32 @@ def create_summary(in_video, allowed_objects=None,
         if not os.path.exists(_store_data_path):
             os.mkdir(_store_data_path)
 
-        yolo_object_tracker(in_frame_folder=frames_dir_path,
-                            in_detection_result_file=detection_results_path,
-                            in_foreground_mask_folder=foreground_mask_dir_path,
-                            _store_path=_store_path,
-                            _store_data_path=_store_data_path)
-
-    # Create summarized video
-    summarized_frames_path = os.path.join(new_dir_path, "summarized_frames")
-    if not os.path.exists(summarized_frames_path) or force_create_summarized_video:
-        print("8. Summarized Video Creation Initiated.")
-
-        if not os.path.exists(summarized_frames_path):
-            os.mkdir(summarized_frames_path)
-
-        process_yolo_background_sub(in_results_file=_store_path,
-                                    in_background_file=background_path,
-                                    out_frame_folder=summarized_frames_path,
-                                    allowed_objects=allowed_objects)
+    #     # yolo_object_tracker(in_frame_folder=frames_dir_path,
+    #     #                     in_detection_result_file=detection_results_path,
+    #     #                     in_foreground_mask_folder=foreground_mask_dir_path,
+    #     #                     _store_path=_store_path,
+    #     #                     _store_data_path=_store_data_path)
+    #
+    # # Create summarized video
+    # summarized_frames_path = os.path.join(new_dir_path, "summarized_frames")
+    # if not os.path.exists(summarized_frames_path) or force_create_summarized_video:
+    #     print("8. Summarized Video Creation Initiated.")
+    #
+    #     if not os.path.exists(summarized_frames_path):
+    #         os.mkdir(summarized_frames_path)
+    #
+    #     process_yolo_background_sub(in_results_file=_store_path,
+    #                                 in_background_file=background_path,
+    #                                 out_frame_folder=summarized_frames_path,
+    #                                 allowed_objects=allowed_objects)
 
     # add_tracker_to_yolo(detection_results_path)
-    # improved_fill_missing_detection(in_frame_folder=frames_dir_path, in_detection_result_file=detection_results_path)
+    improved_fill_missing_detection(in_frame_folder=frames_dir_path, in_detection_result_file=detection_results_path)
     print("Summarized Video Created")
 
 
 def main():
-    create_summary("videos/ferozpurclip.mp4")
+    create_summary("videos/underpass.m4v")
 
 
 main()
