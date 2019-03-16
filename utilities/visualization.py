@@ -1,9 +1,10 @@
 import os
-import cv2
 import time
 
-from utilities.utils import BATRPickle
+import cv2
 from yolov3.yolov3 import Yolov3
+
+from utilities.utils import BATRPickle
 
 
 def yolo_drawbbox(in_frame_folder, in_detection_result_file, out_folder=None, start=1, end=None, show_video=False):

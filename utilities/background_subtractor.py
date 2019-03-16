@@ -3,13 +3,13 @@ import os
 import cv2
 
 
-def background_sub(in_frame_folder, out_frame_folder, thresholded=True, start=1, end=None):
+def background_sub(in_frame_folder, out_frame_folder, thresholded=True, start=0, end=None):
     """
     Output background subtractor output to path specified by "out_frame_folder" or 2nd argument
     :param in_frame_folder: Path of Folder Containing Input Frames
     :param out_frame_folder: Path of Folder where output of background subtractor is saved
     :param thresholded: is output be thresholded? (default=True)
-    :param start: Starting Frame Number (default: 1)
+    :param start: Starting Frame Number (default: 0)
     :param end: Ending Frame Number (default: last frame)
     """
     in_frame_folder = os.path.abspath(in_frame_folder)
@@ -36,7 +36,3 @@ def background_sub(in_frame_folder, out_frame_folder, thresholded=True, start=1,
 
         if frame_n == end:
             break
-
-
-if __name__ == "__main__":
-    fire.Fire(background_sub)

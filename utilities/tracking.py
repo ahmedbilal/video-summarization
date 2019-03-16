@@ -1,10 +1,10 @@
+import operator
+import os
 import random
 import time
-import os
+
 import cv2
-import operator
 import math
-from utilities.utils import BATRPickle
 
 
 class StoredObject(object):
@@ -130,6 +130,8 @@ def track_object(obj, obj_mask, obj_image, _store, _frame_n, _store_data_path):
     :param obj_image:
     :type _store: list
     :type obj: DetectedObject
+    :param _frame_n: Frame number
+    :param _store_data_path: Store Data Path
     """
 
     _bbox = obj.xa(), obj.ya(), obj.xb(), obj.yb()

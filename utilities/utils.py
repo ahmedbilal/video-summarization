@@ -1,11 +1,11 @@
+import hashlib
 import os
 import pickle
 import tarfile
-import zlib
-import hashlib
 
 import cv2
 import numpy as np
+import zlib
 
 
 def bbox_to_roi(bbox):
@@ -27,9 +27,6 @@ def diff_perc(image1, image2):
 
 
 class BATRVideoCapture(object):
-    __author__ = "Ahmad Bilal Khalid"
-    __credits__ = None
-
     def __init__(self, file, offset=0):
         if os.path.isfile(file):
             self.video = cv2.VideoCapture(file)
@@ -44,7 +41,7 @@ class BATRVideoCapture(object):
 
     def set_offset(self, offset):
         self.video.set(cv2.CAP_PROP_POS_FRAMES, offset-1)
-    
+
     def frames_generator(self):
         """
         Author: Ahmed Bilal Khalid
@@ -110,7 +107,7 @@ class BATRPickle(object):
             filename, file_extension = os.path.splitext(in_file)
             self.input_file = tarfile.open(in_file,
                                            "r:{}".format(file_extension[1:]))  # ignoring the dot in extension
-        
+
         if out_file:
             filename, file_extension = os.path.splitext(out_file)
             self.output_file = tarfile.open(out_file,
@@ -127,24 +124,9 @@ class BATRPickle(object):
         serialized_obj = pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
         compressed = zlib.compress(serialized_obj, 9)
         with open(_filename, "wb") as f:
-            f.write(compressed)        
+            f.write(compressed)
         self.output_file.add(_filename)
         os.remove(_filename)
-
-    # def unpickle(self):
-    #     """
-    #     Author: Ahmed Bilal Khalid
-    #     Contributor: None
-    #
-    #     Return an iterator to name of uncompressed and unpickled file member of self.input_file and its content
-    #     """
-    #
-    #     members = self.input_file.getmembers()
-    #     for member in members:
-    #         f = self.input_file.extractfile(member)
-    #         content = f.read()
-    #         uncompressed = zlib.decompress(content)
-    #         yield member.name, pickle.loads(uncompressed)
 
     def unpickle(self, filename):
         member = self.input_file.getmember("{}.pickled.zlibed".format(filename))
@@ -163,7 +145,7 @@ class BATRPickle(object):
 
         if self.input_file:
             self.input_file.close()
-        
+
         if self.output_file:
             self.output_file.close()
 

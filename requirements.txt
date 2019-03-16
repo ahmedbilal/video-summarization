@@ -7,3 +7,4 @@ imgaug
 wheel
 tensorflow
 IPython
+tqdm
