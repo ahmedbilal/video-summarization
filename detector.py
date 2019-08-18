@@ -1,7 +1,9 @@
+import os
 from abc import ABC, abstractmethod
 
 import cv2
 import numpy as np
+from yolov3.yolov3 import Yolov3
 
 
 class DetectedObject(object):
@@ -79,6 +81,37 @@ class Detector(ABC):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
+    def __repr__(self):
+        raise NotImplementedError()
+
+
+class YOLOGPU(Detector):
+    def __init__(self):
+        self.yolov3 = Yolov3()
+
+    def detect(self, image_filename):
+        r = self.yolov3.detect(self.yolov3.net, self.yolov3.meta,
+                               image_filename.encode("ascii"))
+        detection = []
+        for detected_obj in r:
+            _type = detected_obj[0]
+
+            _cx = int(detected_obj[2][0])
+            _cy = int(detected_obj[2][1])
+            _w = int(detected_obj[2][2])
+            _h = int(detected_obj[2][3])
+            _x = int(_cx - _w / 2)
+            _y = int(_cy - _h / 2)
+
+            _obj = DetectedObject(_type=_type, _probability=detected_obj[1],
+                                  _x=_x, _y=_y, _w=_w, _h=_h)
+
+            detection.append(_obj)
+        return detection
+
+    def __repr__(self):
+        return "YOLO GPU"
+
 
 class FasterRCNN(Detector):
     # https://heartbeat.fritz.ai/real-time-object-detection-on-raspberry-pi-using-opencv-dnn-98827255fa60
@@ -129,6 +162,9 @@ class FasterRCNN(Detector):
                 detected_objects.append(detected_object)
 
         return detected_objects
+
+    def __repr__(self):
+        return "FRCNN"
 
 
 class YOLO(Detector):
@@ -212,3 +248,33 @@ class YOLO(Detector):
         layer_names = self.net.getLayerNames()
         output_layers = [layer_names[i[0] - 1] for i in self.net.getUnconnectedOutLayers()]
         return output_layers
+
+    def __repr__(self):
+        return "YOLO"
+
+
+class PseudoDetector(Detector):
+    def __init__(self, annotation_file):
+        with open(annotation_file, "r") as f:
+            self.detections = {}
+            for line in f.readlines():
+                line = line.strip().split(",")
+
+                frame = line[0]
+                x = int(line[1])
+                y = int(line[2])
+                w = int(line[3]) - x
+                h = int(line[4]) - y
+                label = line[5]
+
+                if frame in self.detections.keys():
+                    self.detections[frame].append(DetectedObject(label, 1, x, y, w, h))
+                else:
+                    self.detections[frame] = [DetectedObject(label, 1, x, y, w, h)]
+
+    def detect(self, image_filename):
+        detection = self.detections.get(os.path.basename(image_filename), [])
+        return detection
+
+    def __repr__(self):
+        return "PseudoDetector"

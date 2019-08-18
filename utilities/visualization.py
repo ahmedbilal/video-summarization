@@ -2,7 +2,7 @@ import os
 import time
 
 import cv2
-from yolov3.yolov3 import Yolov3
+# from yolov3.yolov3 import Yolov3
 
 from utilities.utils import BATRPickle
 

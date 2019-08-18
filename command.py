@@ -2,16 +2,20 @@ import operator
 import os
 import pickle
 from enum import Enum
+from abc import ABC, abstractmethod
+from video import Video
 
 import cv2
 import math
 import numpy as np
+import GPUtil
 
-from detector import YOLO, DetectedObject
+from detector import (YOLO, DetectedObject, FasterRCNN,
+                      PseudoDetector, YOLOGPU)
 from utilities.background_subtractor import background_sub
 from utilities.tracking import bb_intersection_over_union, intersection, track_object
 from utilities.utils import BATRPickle, extract_background
-from utilities.visualization import write_text, draw_object_track
+from utilities.visualization import write_text
 
 
 class Color(Enum):
@@ -21,6 +25,202 @@ class Color(Enum):
     YELLOW = 0, 255, 255
     WHITE = 255, 255, 255
     BLACK = 0, 0, 0
+
+# Why Command Pattern?
+# We want to intercept/schedule what and how different operations are executed.
+# For Example,
+# 1. We may want to run CPU Demanding and GPU Demanding Commands in Parallel.
+# 2. We want to add gaps between executing certain commands to let our CPU or GPU to cooldown.
+# 3. We want to change how certain command is executed without changing the main code
+#    (driver) which add the command to CommandQueue
+
+
+class Command(ABC):
+    def __init__(self, obj, description=None):
+        self._obj = obj
+        self.description = description
+
+    @abstractmethod
+    def execute(self):
+        pass
+
+
+class ConvertVideoToFramesCommand(Command):
+    def __init__(self, *args, **kwargs):
+        kwargs["description"] = "Video To Frame Conversion"
+        super().__init__(*args, **kwargs)
+
+    def execute(self):
+        if not os.listdir(self._obj.frames_path):
+            # options = "-loglevel panic -start_number 0 -b:v 10000k  -vsync 0 -an -y -q:v 5"
+            options = "-start_number 0 -vf fps=5 -q:v 5"
+            frame_path = os.path.join(self._obj.frames_path, 'frame%06d.jpg')
+            os.system(f"ffmpeg -i {self._obj.video_path} {options} {frame_path}")
+        return True
+
+
+class ExtractBackgroundCommand(Command):
+    def __init__(self, *args, **kwargs):
+        kwargs["description"] = "Background Extraction"
+        super().__init__(*args, **kwargs)
+
+    def execute(self):
+        if not os.path.exists(self._obj.background_path):
+            extract_background(self._obj.frames_path, self._obj.background_path)
+        return True
+
+
+def have_nvidia_gpu():
+    try:
+        g = GPUtil.getGPUs()
+        if g:
+            return True
+        else:
+            return False
+    except ValueError:
+        return False
+
+
+def available_computing_devices():
+    devices = ["CPU"]
+    if have_nvidia_gpu():
+        devices.append("GPU")
+    return devices
+
+
+class DetectorChain(object):
+    next = None
+
+    def __init__(self, video, detector, allowed_devices):
+        self.video = video
+        self.detector = detector
+        self.allowed_device = allowed_devices
+
+    def set_next(self, detector):
+        self.next = detector
+        return self.next
+
+    def detect(self, image_filename):
+        devices = available_computing_devices()
+        common_devices = set(self.allowed_device).intersection(devices)
+        if common_devices:
+            return self.detect_image(image_filename)
+        else:
+            return self.next.detect(image_filename=image_filename)
+
+    def detect_image(self, image_filename):
+        # print(self.detector, "is handling.")
+        return self.detector.detect(image_filename)
+
+    def __repr__(self):
+        return str(self.detector)
+
+
+class DetectObjectsCommand(Command):
+    def __init__(self, *args, **kwargs):
+        kwargs["description"] = "Object Detection"
+
+        self.detector = kwargs.pop("detector")
+
+        super().__init__(*args, **kwargs)
+
+    def execute(self):
+        if self.detector not in ["yolo", "frcnn", "pseudo"]:
+            self.detector = DetectorChain(self._obj, YOLOGPU(),
+                                          allowed_devices=["GPU"])
+            self.detector.set_next(DetectorChain(self._obj, YOLO(),
+                                   allowed_devices=["CPU"]))
+            self.detector.set_next(DetectorChain(self._obj, FasterRCNN(),
+                                                 allowed_devices=["CPU"]))
+
+        if not os.path.exists(self._obj.detection_path):
+            if self.detector == "yolo":
+                self.detector = YOLO()
+            elif self.detector == "frcnn":
+                self.detector = FasterRCNN()
+            detect_and_save(self._obj, detector=self.detector)
+        return True
+
+    def __repr__(self):
+        return self.detector
+
+
+class SubtractBackgroundCommand(Command):
+    def __init__(self, *args, **kwargs):
+        kwargs["description"] = "Background Subtraction"
+        super().__init__(*args, **kwargs)
+
+    def execute(self):
+        if not os.listdir(self._obj.foreground_masks_path):
+            background_sub(in_frame_folder=self._obj.frames_path, out_frame_folder=self._obj.foreground_masks_path)
+        return True
+
+
+class ImproveDetectionCommand(Command):
+    def __init__(self, *args, **kwargs):
+        kwargs["description"] = "Improve Object Detection"
+        super().__init__(*args, **kwargs)
+
+    def execute(self):
+        if not os.path.exists(self._obj.store_path) or not os.path.exists(self._obj.store_data_path):
+            improved_fill_missing_detection(self._obj)
+        return True
+
+
+class CreateSummaryCommand(Command):
+    def __init__(self, *args, **kwargs):
+        kwargs["description"] = "Summary Created"
+        self.desired_objects = kwargs.pop("desired_objects")
+        super().__init__(*args, **kwargs)
+
+    def execute(self):
+        process_yolo_background_sub(self._obj, allowed_objects=self.desired_objects)
+        return True
+
+
+class ObjectTrackingCommand(Command):
+    def __init__(self, *args, **kwargs):
+        kwargs["description"] = "Object Tracking"
+        super().__init__(*args, **kwargs)
+
+    def execute(self):
+        if not os.path.exists(self._obj.store_path) or not os.path.exists(self._obj.store_data_path):
+            yolo_object_tracker(self._obj)
+        return True
+
+
+class Publisher(ABC):
+    def __init__(self):
+        self.__observers = []
+
+    def register_observer(self, observer):
+        self.__observers.append(observer)
+
+    def notify_observers(self, *args, **kwargs):
+        for observer in self.__observers:
+            observer.notify(self, *args, **kwargs)
+
+
+class CommandQueue(Publisher):
+    def __init__(self):
+        super().__init__()
+        self.pending_commands = []
+        self.completed_commands = []
+
+    def add_command(self, command):
+        self.pending_commands.append(command)
+
+    def execute_all(self):
+        while self.pending_commands:
+            command = self.pending_commands.pop(0)
+            success = command.execute()
+            if success:
+                self.completed_commands.append(command)
+                completed_commands_len = len(self.completed_commands)
+                pending_commands_len = len(self.pending_commands)
+                total_commands_len = completed_commands_len + pending_commands_len
+                self.notify_observers(progress=f"{completed_commands_len/total_commands_len}",
+                                      completed_command_description=command.description)
 
 
 def object_bbox_check(frame, obj):
@@ -116,19 +316,19 @@ def nearest_neighbor(obj, detected_objects):
     return math.inf, math.inf
 
 
-def improved_fill_missing_detection(in_frame_folder, in_detection_result_file):
-    in_detection_result_file = os.path.abspath(in_detection_result_file)
+def improved_fill_missing_detection(video: Video):
+    in_detection_result_file = os.path.abspath(video.detection_path)
 
     pickler = BATRPickle(in_file=in_detection_result_file)
 
     tracking_path = os.path.join(os.path.dirname(in_detection_result_file), "improved_detections.tar.gz")
     output_pickler = BATRPickle(out_file=tracking_path)
 
-    sorted_frames_abs_filenames = sorted([os.path.join(in_frame_folder, filename) for filename in
-                                          os.listdir(in_frame_folder)])
+    sorted_frames_abs_filenames = sorted([os.path.join(video.frames_path, filename) for filename in
+                                          os.listdir(video.frames_path)])
     last_serial = 0
     previously_detected_objects = []
-    for frame_n, frame_filename in enumerate(sorted_frames_abs_filenames):
+    for frame_n, frame_filename in enumerate(sorted_frames_abs_filenames, start=0):
         # print(f"Frame # {frame_n}\n{'-' * 10}")
 
         frame = cv2.imread(frame_filename)
@@ -161,7 +361,7 @@ def improved_fill_missing_detection(in_frame_folder, in_detection_result_file):
             if not math.isinf(nn_index):
                 intersect = intersection(obj.bbox(), detected_objects[nn_index].bbox())
 
-                if intersect/(obj.w * obj.h) > 0.7:
+                if obj.w * obj.h == 0 or intersect/(obj.w * obj.h) > 0.7:
                     continue
                 # cv2.rectangle(frame, obj.pt_a(), obj.pt_b(), COLOR['blue'], 6)
             #
@@ -205,31 +405,28 @@ def improved_fill_missing_detection(in_frame_folder, in_detection_result_file):
         # cv2.destroyAllWindows()
 
 
-def detect_and_save(in_frame_folder, out_file_name, start=0, end=None, detector=YOLO):
+def detect_and_save(video: Video, start=0, end=None, detector=None):
     """
     Create a file containing object detection results of frames inside in_frame_folder
 
-    :param in_frame_folder: Path of Folder Containing Input Frames
-    :param out_file_name: Path of Output File (that will contain detection results)
+    :param video: Object of Video class
     :param start: Starting Frame Number (default: 1)
     :param end: Ending Frame Number (default: last frame)
     :param detector: Detector to use for object detection
     """
 
-    in_frame_folder = os.path.abspath(in_frame_folder)
-    out_file_name = os.path.abspath(out_file_name)
+    in_frame_folder = os.path.abspath(video.frames_path)
+    out_file_name = os.path.abspath(video.detection_path)
 
     # print(in_frame_folder, out_file_name)
-
-    obj_detector = detector()
+    print(detector)
     pickler = BATRPickle(out_file=out_file_name)
 
     sorted_frames_filenames = sorted(os.listdir(in_frame_folder))
 
     for frame_n, frame_filename in enumerate(sorted_frames_filenames, start=start):
         frame_filename = os.path.join(in_frame_folder, frame_filename)
-
-        detected_objects = obj_detector.detect(frame_filename)
+        detected_objects = detector.detect(frame_filename)
 
         pickler.pickle(detected_objects, f"frame{frame_n:06d}")
 
@@ -240,15 +437,14 @@ def detect_and_save(in_frame_folder, out_file_name, start=0, end=None, detector=
     del pickler
 
 
-def process_yolo_background_sub(in_results_file, out_frame_folder,
-                                in_background_file, allowed_objects=None):
+def process_yolo_background_sub(video: Video, allowed_objects=None):
 
     if allowed_objects is None:
         allowed_objects = ["car"]
 
-    in_results_file = os.path.abspath(in_results_file)
+    in_results_file = os.path.abspath(video.store_path)
 
-    background = cv2.imread(in_background_file)
+    background = cv2.imread(video.background_path)
     background_float32 = np.float32(background)
     with open(in_results_file, "rb") as f:
         store = pickle.load(f)
@@ -261,11 +457,11 @@ def process_yolo_background_sub(in_results_file, out_frame_folder,
 
     obj_trails = []
 
-    for frame_n in range(1, 600):
+    for frame_n in range(1, 100):
         # print(f"Frame # {frame_n}")
 
         out_frame = np.copy(background)
-        out_frame_path = os.path.join(out_frame_folder, f"frame{frame_n:06d}.jpg")
+        out_frame_path = os.path.join(video.summarized_frames_path, f"frame{frame_n:06d}.jpg")
 
         filled_locations = []
         store.sort(key=lambda x: x.manipulated, reverse=True)
@@ -319,7 +515,7 @@ def process_yolo_background_sub(in_results_file, out_frame_folder,
                                         (obj_bbox.xa() + obj_bbox.w // 2, obj_bbox.ya() + obj_bbox.h // 2),
                                         font, 0.5, (255, 0, 0), 2, cv2.LINE_AA)
 
-        draw_object_track(out_frame, _frame_n=frame_n, _obj_trails=obj_trails)
+        # draw_object_track(out_frame, _frame_n=frame_n, _obj_trails=obj_trails)
         cv2.imwrite(out_frame_path, out_frame)
 
         # cv2.imshow("image", out_frame)
@@ -330,11 +526,10 @@ def process_yolo_background_sub(in_results_file, out_frame_folder,
     cv2.destroyAllWindows()
 
 
-def yolo_object_tracker(in_frame_folder, in_detection_result_file, in_foreground_mask_folder, _store_path,
-                        _store_data_path, start=0, end=None):
-    in_frame_folder = os.path.abspath(in_frame_folder)
-    in_foreground_mask_folder = os.path.abspath(in_foreground_mask_folder)
-    in_detection_result_file = os.path.abspath(in_detection_result_file)
+def yolo_object_tracker(video: Video, start=0, end=None):
+    in_frame_folder = os.path.abspath(video.frames_path)
+    in_foreground_mask_folder = os.path.abspath(video.foreground_masks_path)
+    in_detection_result_file = os.path.abspath(video.detection_path)
 
     pickler = BATRPickle(in_file=in_detection_result_file)
 
@@ -355,174 +550,13 @@ def yolo_object_tracker(in_frame_folder, in_detection_result_file, in_foreground
 
             if obj_mask.size > 0 and obj_image.size > 0:
                 track_object(obj=obj, obj_mask=obj_mask, obj_image=obj_image, _store=store,
-                             _frame_n=frame_n, _store_data_path=_store_data_path)
+                             _frame_n=frame_n, _store_data_path=video.store_data_path)
 
         print(f"Frame# {frame_n}")
 
         if frame_n == end:
             break
-    with open(_store_path, "wb") as f:
+    with open(video.store_path, "wb") as f:
         pickle.dump(store, f)
 
     cv2.destroyAllWindows()
-
-
-class Command(object):
-    def __init__(self, obj, description=None):
-        self._obj = obj
-        self.description = description
-
-    def execute(self):
-        raise NotImplementedError
-
-
-class ConvertVideoToFramesCommand(Command):
-    def __init__(self, *args, **kwargs):
-        kwargs["description"] = "Video To Frame Conversion"
-        super().__init__(*args, **kwargs)
-
-    def execute(self):
-        if not os.listdir(self._obj.frames_path):
-            options = "-loglevel panic -start_number 0 -b:v 10000k -vsync 0 -an -y -q:v 5"
-            frame_path = os.path.join(self._obj.frames_path, 'frame%06d.jpg')
-            os.system(f"ffmpeg -i {self._obj.video_path} {options} {frame_path}")
-        return True
-
-
-class ExtractBackgroundCommand(Command):
-    def __init__(self, *args, **kwargs):
-        kwargs["description"] = "Background Extraction"
-        super().__init__(*args, **kwargs)
-
-    def execute(self):
-        if not os.path.exists(self._obj.background_path):
-            extract_background(self._obj.frames_path, self._obj.background_path)
-        return True
-
-
-class DetectObjectsCommand(Command):
-    def __init__(self, *args, **kwargs):
-        kwargs["description"] = "Object Detection"
-        if kwargs.get("detector"):
-            self.detector = kwargs.get("detector")
-            kwargs.pop("detector")
-        else:
-            self.detector = YOLO
-        super().__init__(*args, **kwargs)
-
-    def execute(self):
-        if not os.path.exists(self._obj.detection_path):
-            detect_and_save(self._obj.frames_path, self._obj.detection_path, detector=self.detector)
-        return True
-
-
-class SubtractBackgroundCommand(Command):
-    def __init__(self, *args, **kwargs):
-        kwargs["description"] = "Background Subtraction"
-        super().__init__(*args, **kwargs)
-
-    def execute(self):
-        if not os.listdir(self._obj.foreground_masks_path):
-            background_sub(in_frame_folder=self._obj.frames_path, out_frame_folder=self._obj.foreground_masks_path)
-        return True
-
-
-class ImproveDetectionCommand(Command):
-    def __init__(self, *args, **kwargs):
-        kwargs["description"] = "Improve Object Detection"
-        super().__init__(*args, **kwargs)
-
-    def execute(self):
-        if not os.path.exists(self._obj.store_path) or not os.path.exists(self._obj.store_data_path):
-            improved_fill_missing_detection(in_frame_folder=self._obj.frames_path,
-                                            in_detection_result_file=self._obj.detection_path)
-        return True
-
-
-class CreateSummaryCommand(Command):
-    def __init__(self, *args, **kwargs):
-        kwargs["description"] = "Summary Created"
-        self.desired_objects = kwargs.pop("desired_objects")
-        super().__init__(*args, **kwargs)
-
-    def execute(self):
-        process_yolo_background_sub(in_results_file=self._obj.store_path,
-                                    in_background_file=self._obj.background_path,
-                                    out_frame_folder=self._obj.summarized_frames_path,
-                                    allowed_objects=self.desired_objects)
-        return True
-
-
-class ObjectTrackingCommand(Command):
-    def __init__(self, *args, **kwargs):
-        kwargs["description"] = "Object Tracking"
-        super().__init__(*args, **kwargs)
-
-    def execute(self):
-        if not os.path.exists(self._obj.store_path) or not os.path.exists(self._obj.store_data_path):
-            yolo_object_tracker(self._obj.frames_path, self._obj.improved_detection_path,
-                                self._obj.foreground_masks_path, self._obj.store_path, self._obj.store_data_path)
-            # pickler = BATRPickle(in_file=self._obj.improved_detection_path)
-            #
-            # sorted_frames_filenames = sorted(os.listdir(self._obj.frames_path))
-            #
-            # store = []
-            # start = 1
-            # end = None
-            # for frame_n, frame_filename in enumerate(sorted_frames_filenames, start=start):
-            #     frame_file_abs_path = os.path.join(self._obj.frames_path, frame_filename)
-            #     foreground_mask_abs_path = os.path.join(self._obj.foreground_masks_path, frame_filename)
-            #     detected_objects = pickler.unpickle(f"frame{frame_n:06d}")
-            #     frame = cv2.imread(frame_file_abs_path)
-            #     mask = cv2.imread(foreground_mask_abs_path)
-            #
-            #     for obj in detected_objects:
-            #         # fixing a bug where obj.type have prefix of "b'" and postfix of "'"
-            #         # this bug comes from Yolo V3 detection layer
-            #         obj.type = str(obj.type)[2:-1]
-            #
-            #         obj_image = frame[obj.ya():obj.yb(), obj.xa():obj.xb()]
-            #         obj_mask = mask[obj.ya():obj.yb(), obj.xa():obj.xb()]
-            #
-            #         if obj_mask.size > 0 and obj_image.size > 0:
-            #             track_object(obj=obj, obj_mask=obj_mask, obj_image=obj_image, _store=store,
-            #                          _frame_n=frame_n, _store_data_path=self._obj.store_data_path)
-            #
-            #     print(f"Frame# {frame_n}")
-            #
-            #     if frame_n == end:
-            #         break
-            # with open(self._obj.store_path, "wb") as f:
-            #     pickle.dump(store, f)
-            #
-            # cv2.destroyAllWindows()
-        return True
-
-
-class CommandQueue(object):
-    def __init__(self):
-        self.pending_commands = []
-        self.completed_commands = []
-        self.__observers = []
-
-    def add_command(self, command):
-        self.pending_commands.append(command)
-
-    def execute_all(self):
-        while self.pending_commands:
-            command = self.pending_commands.pop(0)
-            success = command.execute()
-            if success:
-                self.completed_commands.append(command)
-                completed_commands_len = len(self.completed_commands)
-                pending_commands_len = len(self.pending_commands)
-                total_commands_len = completed_commands_len + pending_commands_len
-                self.notify_observers(progress=f"{completed_commands_len/total_commands_len}",
-                                      completed_command_description=command.description)
-
-    def register_observer(self, observer):
-        self.__observers.append(observer)
-
-    def notify_observers(self, *args, **kwargs):
-        for observer in self.__observers:
-            observer.notify(self, *args, **kwargs)

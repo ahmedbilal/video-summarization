@@ -1,0 +1,23 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+opencv-python = "*"
+wget = "*"
+gputil = "*"
+tqdm = "*"
+ipython = "*"
+tensorflow = "*"
+wheel = "*"
+setuptools = "<=39.1.0"
+imgaug = "*"
+cython = "*"
+numpy = "*"
+opencv-contrib-python = "*"
+
+[requires]
+python_version = "3.7"
