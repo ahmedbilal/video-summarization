@@ -15,12 +15,12 @@ class VideoSummarizationFacade(object):
     def create(self):
         cmd_queue = CommandQueue()
         cmd_queue.add_command(ConvertVideoToFramesCommand(self.video))
-        # cmd_queue.add_command(ExtractBackgroundCommand(self.video))
-        # cmd_queue.add_command(SubtractBackgroundCommand(self.video))
-        # cmd_queue.add_command(DetectObjectsCommand(self.video, detector=self.detector))
+        cmd_queue.add_command(ExtractBackgroundCommand(self.video))
+        cmd_queue.add_command(SubtractBackgroundCommand(self.video))
+        cmd_queue.add_command(DetectObjectsCommand(self.video, detector=self.detector))
         cmd_queue.add_command(ImproveDetectionCommand(self.video))
         cmd_queue.add_command(ObjectTrackingCommand(self.video))
-        # cmd_queue.add_command(CreateSummaryCommand(self.video, desired_objects=["car", "motor-bike"]))
+        cmd_queue.add_command(CreateSummaryCommand(self.video, desired_objects=["car", "motor-bike"]))
 
         ProgressObserver(cmd_queue)
 
